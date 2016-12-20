@@ -1,3 +1,7 @@
 app:
     resource: "@AppBundle/Controller/"
     type:     annotation
+
+listProduit:
+    path: /list.{_format}
+    defaults: {_controller: AppBundle:Produit:listProduit, _format: "html"}

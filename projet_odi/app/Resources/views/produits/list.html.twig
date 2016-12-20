@@ -1,0 +1,40 @@
+{% extends 'base.html.twig' %}
+{% block menu %}
+    {% include 'menu.twig' %}
+{% endblock %}
+{% block section %}
+    <h1><i class="fa fa-users fa-lg"></i>Produit</h1>
+    {% if msg is not empty %}
+        <div class='alert alert-success'>
+            <a href="#" class="close" data-dismiss="alert" aria-label="close">
+                <i class='fa fa-times fa-lg'></i>
+            </a>
+
+            {{ msg }}
+        </div>
+    {% endif %}
+
+    {% if produits %}
+    <table class="table table-striped" id='tab'>
+        <thead>
+            <tr>
+                <th>Référence</th>
+                <th>Nom du produit</th>
+                <th>Prix</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for produit in produits %}
+            <tr>
+                <td>{{ produit.getRefProduit }}</td>
+                <td>{{ produit.getNomProduit }}</td>
+                <td>{{ produit.getPrixProduit }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    {% else %}
+       Aucun produit dans la base.
+    {% endif %}
+{% endblock %}

@@ -10,12 +10,7 @@ class Contenir
     /**
      * @var string
      */
-    private $id_panier;
-
-    /**
-     * @var string
-     */
-    private $ref_produit;
+    private $manyToOne;
 
     /**
      * @var integer
@@ -29,51 +24,27 @@ class Contenir
 
 
     /**
-     * Set idPanier
+     * Set manyToOne
      *
-     * @param string $idPanier
+     * @param string $manyToOne
      *
      * @return Contenir
      */
-    public function setIdPanier($idPanier)
+    public function setManyToOne($manyToOne)
     {
-        $this->id_panier = $idPanier;
+        $this->manyToOne = $manyToOne;
 
         return $this;
     }
 
     /**
-     * Get idPanier
+     * Get manyToOne
      *
      * @return string
      */
-    public function getIdPanier()
+    public function getManyToOne()
     {
-        return $this->id_panier;
-    }
-
-    /**
-     * Set refProduit
-     *
-     * @param string $refProduit
-     *
-     * @return Contenir
-     */
-    public function setRefProduit($refProduit)
-    {
-        $this->ref_produit = $refProduit;
-
-        return $this;
-    }
-
-    /**
-     * Get refProduit
-     *
-     * @return string
-     */
-    public function getRefProduit()
-    {
-        return $this->ref_produit;
+        return $this->manyToOne;
     }
 
     /**

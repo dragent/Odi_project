@@ -45,7 +45,7 @@ class Produit
     /**
      * @var \DateTime
      */
-    private $date_peremption_prduit;
+    private $date_peremption_produit;
 
     /**
      * @var string
@@ -227,27 +227,27 @@ class Produit
     }
 
     /**
-     * Set datePeremptionPrduit
+     * Set datePeremptionProduit
      *
-     * @param \DateTime $datePeremptionPrduit
+     * @param \DateTime $datePeremptionProduit
      *
      * @return Produit
      */
-    public function setDatePeremptionPrduit($datePeremptionPrduit)
+    public function setDatePeremptionProduit($datePeremptionProduit)
     {
-        $this->date_peremption_prduit = $datePeremptionPrduit;
+        $this->date_peremption_produit = $datePeremptionProduit;
 
         return $this;
     }
 
     /**
-     * Get datePeremptionPrduit
+     * Get datePeremptionProduit
      *
      * @return \DateTime
      */
-    public function getDatePeremptionPrduit()
+    public function getDatePeremptionProduit()
     {
-        return $this->date_peremption_prduit;
+        return $this->date_peremption_produit;
     }
 
     /**

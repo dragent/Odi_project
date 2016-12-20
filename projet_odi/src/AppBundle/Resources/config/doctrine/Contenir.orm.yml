@@ -8,13 +8,15 @@ AppBundle\Entity\Contenir:
         date_panier:
             type: datetime
     id:
-        id_panier:
-            targetEntity: Panier
-            joinColumns:
-                panier:
-                    referencedColumnName: id_panier
-        ref_produit:
-            targetEntity: Produit
-            joinColumns:
-                produit:
-                    referencedColumnName: ref_produit
+        manyToOne:
+            id_panier:
+                targetEntity: Panier
+                joinColumns:
+                    panier:
+                        referencedColumnName: id_panier
+        manyToOne:
+            ref_produit:
+                targetEntity: Produit
+                joinColumns:
+                    produit:
+                        referencedColumnName: ref_produit
