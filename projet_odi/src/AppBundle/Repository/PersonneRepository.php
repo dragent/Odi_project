@@ -10,4 +10,18 @@ namespace AppBundle\Repository;
  */
 class PersonneRepository extends \Doctrine\ORM\EntityRepository
 {
+    public function findList(){
+
+          $orderby = array('idPersonne' => 'ASC');
+
+          return $this->findBy(array(), $orderby);
+      }
+
+      public function findById($ref){
+
+          $keys = array("idPersonne" => $ref);
+          $orderby = array('idPersonne' => 'ASC');
+
+          return $this->find($keys, $orderby);
+      }
 }

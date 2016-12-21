@@ -1,9 +1,9 @@
 {% extends 'base.html.twig' %}
 {% block menu %}
-    {% include 'menu.twig' %}
+    {% include 'menubase.twig' %}
 {% endblock %}
 {% block section %}
-    <h1><i class="fa fa-users fa-lg"></i>Produit</h1>
+    <h1><i class="fa fa-pencil fa-lg"></i>Produit</h1>
     {% if msg is not empty %}
         <div class='alert alert-success'>
             <a href="#" class="close" data-dismiss="alert" aria-label="close">
@@ -18,17 +18,21 @@
     <table class="table table-striped" id='tab'>
         <thead>
             <tr>
+                <th>Photo</th>
                 <th>Référence</th>
                 <th>Nom du produit</th>
+                <th>Description</th>
                 <th>Prix</th>
             </tr>
         </thead>
         <tbody>
         {% for produit in produits %}
             <tr>
+                <td> <img src="img/{{ produit.getPhotoProduit }}" alt="stylo" /></td>
                 <td>{{ produit.getRefProduit }}</td>
                 <td>{{ produit.getNomProduit }}</td>
-                <td>{{ produit.getPrixProduit }}</td>
+                <td>{{ produit.getDescriptionProduit }}</td>
+                <td>{{ produit.getPrixProduit }} <i class="fa fa-eur" aria-hidden="true"></i></td>
             </tr>
         {% endfor %}
         </tbody>

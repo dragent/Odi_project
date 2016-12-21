@@ -1,0 +1,45 @@
+{% extends 'base.html.twig' %}
+{% block menu %}
+    {% include 'menubase.twig' %}
+{% endblock %}
+{% block section %}
+    <h1>Personnes list</h1>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Id_personne</th>
+                <th>Pseudo_personne</th>
+                <th>Mdp_personne</th>
+                <th>Type_personne</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for personne in personnes %}
+            <tr>
+                <td><a href="{{ path('montrePersonne', { 'id': personne.getIdPersonne }) }}">{{ personne.getIdpersonne }}</a></td>
+                <td>{{ personne.pseudopersonne }}</td>
+                <td>{{ personne.mdppersonne }}</td>
+                <td>{{ personne.typepersonne }}</td>
+                <td>
+                    <ul>
+                        <li>
+                            <a href="{{ path('montrePersonne', { 'id': personne.getIdPersonne }) }}">show</a>
+                        </li>
+                        <li>
+                            <a href="{{ path('montrePersonne', { 'id': personne.getIdPersonne }) }}">edit</a>
+                        </li>
+                    </ul>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <ul>
+        <li>
+            <a href="{{ path('personne_new') }}">Create a new personne</a>
+        </li>
+    </ul>
+{% endblock %}

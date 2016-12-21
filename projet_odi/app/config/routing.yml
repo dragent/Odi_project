@@ -5,3 +5,19 @@ app:
 listProduit:
     path: /list.{_format}
     defaults: {_controller: AppBundle:Produit:listProduit, _format: "html"}
+
+affichePersonne:
+    path: /personne
+    defaults: {_controller: AppBundle:Personne:index}
+
+montrePersonne:
+    path: /personne/show
+    defaults: {_controller: AppBundle:Personne:show}
+
+personne_new:
+    path: /personne/new
+    defaults: {_controller: AppBundle:Personne:new}
+
+identification:
+    path: /identification
+    defaults: {_controller: AppBundle:Personne:identification}
