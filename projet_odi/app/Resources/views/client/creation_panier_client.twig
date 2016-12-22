@@ -1,0 +1,15 @@
+{% extends 'base.html.twig' %}
+
+{% block menu %}
+    {% include 'client/menu_client.twig' %}
+{% endblock %}
+
+{% block header %}
+{% endblock %}
+
+{% block section %}
+    <h2>Creation de panier : <a href="{{ path('creation_panier_client') }}" class="btn btn-primary">Nouveau Panier (ou reprise du precedent)</a></h2>
+{% endblock %}
+
+{% block footer %}
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends 'base.html.twig' %}
+
+{% block menu %}
+    {% include 'client/menu_client.twig' %}
+{% endblock %}
+
+{% block header %}
+{% endblock %}
+
+{% block section %}
+    <h2>Liste des paniers : </h2>
+    <div class="container">
+    <table class="table table-striped ">
+      <thead>
+        <tr>
+          <th>id</th>
+          <th>etat</th>
+          <th>date</th>
+          <th>contenu</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for paniers in Panier %}
+    	<tr>
+          <td>{{ paniers.getIdPanier() }}</td>
+          {% if paniers.getEtatPanier() == 1 %}
+            <td>Non validé</td>
+          {% elseif paniers.getEtatPanier() == 2 %}
+            <td>En cours de traitement</td>
+          {% else %}
+            <td>dunnolol</td>
+          {% endif %}
+          <td>{{ paniers.getDatePanier() | date("d/m/Y")}}</td>
+          <td><a class="btn btn-primary" href="{{ path('contenu_panier_client', { id_panier : paniers.getIdPanier() }) }}">voir</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table> 
+    </div>
+{% endblock %}
+
+{% block footer %}
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends 'base.html.twig' %}
+
+{% block menu %}
+    {% include 'client/menu_client.twig' %}
+{% endblock %}
+
+{% block header %}
+{% endblock %}
+
+{% block section %}
+    <h2>Contenu du panier : {{ Panier.getIdPanier() }}</h1>
+    <div class="container">
+	<table class="table table-striped " style="background-color:lightblue;">
+  	    <thead>
+          <tr>
+            <th>ref</th>
+            <th>nom</th>
+            <th>qtt</th>
+            <th>prix/unite</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for contenir in Contenir %}
+    	    <tr>
+              <td>{{ contenir.getRefProduit() }}</td>
+              {% for produit in Produit %}
+              {% if produit.getRefProduit() == contenir.getRefProduit() %}
+                <td>{{ produit.getNomProduit() }}</td>
+              {% endif %}
+              {% endfor %}
+              <td>{{ contenir.getQuantiteProduit() }}</td>
+              {% for produit in Produit %}
+              {% if produit.getRefProduit() == contenir.getRefProduit() %}
+                <td>{{ produit.getPrixProduit() }}</td>
+              {% endif %}
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+{% endblock %}
+
+{% block footer %}
+{% endblock %}

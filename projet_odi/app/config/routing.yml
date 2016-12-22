@@ -1,3 +1,48 @@
 app:
     resource: "@AppBundle/Controller/"
     type:     annotation
+    defaults: 
+        _controller: AppBundle:Default:index
+    
+
+liste_produits:
+    path: /produits/liste_produits
+    defaults: 
+        _controller: AppBundle:ListeProduits:list
+        
+panier_client:
+    path: /client/panier
+    defaults:
+        _controller: AppBundle:CreationPanier:index
+        
+creation_panier_client:
+    path: /client/creation_panier
+    defaults:
+        _controller: AppBundle:CreationPanier:newPanier
+        
+ajout_dans_panier_client:
+    path: /client/ajout_panier/{id_panier}/{ref}/{qtt}
+    defaults:
+        _controller: AppBundle:CreationPanier:addToPanier
+        
+liste_paniers_client: 
+    path: /client/liste_paniers
+    defaults:
+        _controller: AppBundle:ListePaniers:listPaniers
+        
+contenu_panier_client:
+    path: /client/panier/{id_panier}
+    defaults:
+        _controller: AppBundle:ListePaniers:viewPanier
+        
+delete_panier_client:
+    path: /client/delete_panier/{id_panier}
+    defaults:
+        _controller: AppBundle:CreationPanier:delPanier
+        
+validate_panier_client:
+    path: /client/validate_panier/{id_panier}
+    defaults:
+        _controller: AppBundle:CreationPanier:validatePanier
+    
+    
