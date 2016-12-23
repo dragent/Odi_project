@@ -109,5 +109,10 @@ class Panier
     {
         return $this->id_personne;
     }
+    
+    public function __toString()
+    {
+    	return (string) $this->getIdPersonne();
+    }
 }
 

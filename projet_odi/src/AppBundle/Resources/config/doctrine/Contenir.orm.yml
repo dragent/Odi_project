@@ -7,6 +7,8 @@ AppBundle\Entity\Contenir:
             type: integer
         date_panier:
             type: datetime
+        quantite_produit_geree:
+            type: integer
     id:
         id_panier:
             targetEntity: Panier

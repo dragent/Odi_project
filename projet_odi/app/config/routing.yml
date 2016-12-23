@@ -44,5 +44,21 @@ validate_panier_client:
     path: /client/validate_panier/{id_panier}
     defaults:
         _controller: AppBundle:CreationPanier:validatePanier
+        
+liste_paniers_magasinier: 
+    path: /magasinier/liste_paniers
+    defaults:
+        _controller: AppBundle:GestionPaniersMagasinier:listPaniers
+        
+gestion_panier_magasinier:
+    path: /magasinier/gestion_panier/{id_panier}
+    defaults:
+        _controller: AppBundle:GestionPaniersMagasinier:gestionPanier
     
+gestion_panier_produit_magasinier:
+    path: /magasinier/produit_gestion_panier/{id_panier}/{ref}/{qtt}
+    defaults:
+        _controller: AppBundle:GestionPaniersMagasinier:gestionPanierProduit
+        
+        
     

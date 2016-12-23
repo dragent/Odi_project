@@ -109,5 +109,10 @@ class Personne
     {
         return $this->type_personne;
     }
+    
+    public function __toString()
+    {
+    	return (string) $this->getIdPersonne();
+    }
 }
 

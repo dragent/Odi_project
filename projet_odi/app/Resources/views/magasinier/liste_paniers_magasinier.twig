@@ -1,0 +1,37 @@
+{% extends 'base.html.twig' %}
+
+{% block menu %}
+    {% include 'menu.twig' %}
+{% endblock %}
+
+{% block header %}
+{% endblock %}
+
+{% block section %}
+    <h2>Liste des paniers a gerer: </h2>
+    <div class="container">
+    <table class="table table-striped ">
+      <thead>
+        <tr>
+          <th>id panier</th>
+          <th>id personne</th>
+          <th>date</th>
+          <th>contenu</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for paniers in Panier %}
+    	<tr>
+          <td>{{ paniers.getIdPanier() }}</td>
+          <td>{{ paniers.getIdPersonne() }}</td>
+          <td>{{ paniers.getDatePanier() | date("d/m/Y")}}</td>
+          <td><a class="btn btn-primary" href="{{ path('gestion_panier_magasinier', { id_panier : paniers.getIdPanier() }) }}">gerer</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table> 
+    </div>
+{% endblock %}
+
+{% block footer %}
+{% endblock %}

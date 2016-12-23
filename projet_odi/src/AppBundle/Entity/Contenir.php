@@ -26,7 +26,11 @@ class Contenir
      * @var \DateTime
      */
     private $date_panier;
-
+    
+    /**
+     * @var integer
+     */
+    private $quantite_produit_geree;
 
     /**
      * Set idPanier
@@ -123,5 +127,34 @@ class Contenir
     {
         return $this->date_panier;
     }
+    
+    /**
+     * Set quantiteProduitGeree
+     *
+     * @param integer $quantiteProduitGeree
+     *
+     * @return Contenir
+     */
+    public function setQuantiteProduitGeree($quantiteProduitGeree)
+    {
+    	$this->quantite_produit_geree = $quantiteProduitGeree;
+    
+    	return $this;
+    }
+    
+    /**
+     * Get quantiteProduitGeree
+     *
+     * @return integer
+     */
+    public function getQuantiteProduitGeree()
+    {
+    	return $this->quantite_produit_geree;
+    }
+    
+    
+    
+    
+    
 }
 
