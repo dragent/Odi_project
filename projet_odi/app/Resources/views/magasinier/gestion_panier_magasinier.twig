@@ -52,9 +52,18 @@
           {% endfor %}
         </tbody>
       </table>
+      {% set validate = 1 %}
+      {% for contenir in Contenir %}
+        {% if (contenir.getQuantiteProduit() - contenir.getQuantiteProduitGeree()) > 0 %}
+          {% set validate = 0 %}
+        {% endif %}
+      {% endfor %}
       
-      <a type="button" class="btn btn-default btn-sm" href="{{ path('gestion_panier_valider_magasinier', { id_panier : Panier.getIdPanier() }) }}" >Valider panier</a>
-      
+      {% if validate == 1 %}
+        <a type="button" class="btn btn-success btn-sm" href="{{ path('gestion_panier_valider_magasinier', { id_panier : Panier.getIdPanier() }) }}" >Valider panier</a>
+      {% else %}
+        <a type="button" class="btn btn-danger btn-sm" href="#" >Valider panier</a>
+      {% endif %}
       </div>
       
       
