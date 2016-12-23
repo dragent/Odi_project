@@ -28,7 +28,7 @@
           {% elseif paniers.getEtatPanier() == 2 %}
             <td>En cours de traitement</td>
           {% else %}
-            <td>dunnolol</td>
+            <td>Traité</td>
           {% endif %}
           <td>{{ paniers.getDatePanier() | date("d/m/Y")}}</td>
           <td><a class="btn btn-primary" href="{{ path('contenu_panier_client', { id_panier : paniers.getIdPanier() }) }}">voir</a></td>

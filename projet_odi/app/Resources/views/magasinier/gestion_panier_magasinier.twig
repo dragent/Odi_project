@@ -42,12 +42,19 @@
                 <input type="number" id="qtt{{ cpt }}" value="1"></input>
               </td>
               <td>
-                <a type="button" class="btn btn-default btn-sm" onclick="confirme('{{ cpt }}','{{ Panier.getIdPanier() }}','{{ contenir.getRefProduit() }}')">{% set qtt %}3{% endset %}Confirmer</a>
+                {% if (contenir.getQuantiteProduit() - contenir.getQuantiteProduitGeree()) == 0 %}
+                  OK
+                {% else %}
+                  <a type="button" class="btn btn-default btn-sm" onclick="confirme('{{ cpt }}','{{ Panier.getIdPanier() }}','{{ contenir.getRefProduit() }}')">{% set qtt %}3{% endset %}Confirmer</a>
+                {% endif %}
               </td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
+      
+      <a type="button" class="btn btn-default btn-sm" href="{{ path('gestion_panier_valider_magasinier', { id_panier : Panier.getIdPanier() }) }}" >Valider panier</a>
+      
       </div>
       
       

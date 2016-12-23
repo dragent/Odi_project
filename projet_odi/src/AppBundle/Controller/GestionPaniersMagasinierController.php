@@ -62,5 +62,19 @@ class GestionPaniersMagasinierController extends Controller
 		
 		return $this->render('magasinier/gestion_panier_magasinier.twig',['Contenir' => $contenir, 'Panier' => $panier, 'Produit' => $produit]);
 	}
+	
+	public function gestionPanierValiderAction(Request $request, $id_panier){
+		$em = $this->getDoctrine()->getManager();
+		
+		$panier = $em->getRepository(Panier::class)->findOneBy(array('id_panier' => $id_panier));
+		$panier->setEtatPanier(3);//1=encours 2=validé par client 3=traité
+		$em->persist($panier);
+		$em->flush();
+		
+		//on retourne a la liste de paniers a gerer
+		$paniers = $em->getRepository(Panier::class)->findBy(array('etat_panier' => '2'));
+		
+		return $this->render('magasinier/liste_paniers_magasinier.twig',['Panier' => $paniers]);
+	}
 
 }

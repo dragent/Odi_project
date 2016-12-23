@@ -60,5 +60,10 @@ gestion_panier_produit_magasinier:
     defaults:
         _controller: AppBundle:GestionPaniersMagasinier:gestionPanierProduit
         
+gestion_panier_valider_magasinier:
+    path: /magasinier/valider_gestion_panier/{id_panier}
+    defaults:
+        _controller: AppBundle:GestionPaniersMagasinier:gestionPanierValider
+        
         
     
