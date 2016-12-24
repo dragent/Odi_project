@@ -15,11 +15,11 @@ class __TwigTemplate_7e0cf4e98db2972e5698a2d72d334f443e4dd34073784bfec28eaf4b7ed
 
     protected function doDisplay(array $context, array $blocks = array())
     {
-        $__internal_0b94ec5801a151ea81e2bb9c967dcef0d0c9c037ecbf525a6182190ffd653a04 = $this->env->getExtension("Symfony\\Bundle\\WebProfilerBundle\\Twig\\WebProfilerExtension");
-        $__internal_0b94ec5801a151ea81e2bb9c967dcef0d0c9c037ecbf525a6182190ffd653a04->enter($__internal_0b94ec5801a151ea81e2bb9c967dcef0d0c9c037ecbf525a6182190ffd653a04_prof = new Twig_Profiler_Profile($this->getTemplateName(), "template", "client/menu_client.twig"));
+        $__internal_caf881077a73a7f8e5b84edeb8204f6edeb3d119f387f00628be58e0a97fe25f = $this->env->getExtension("Symfony\\Bundle\\WebProfilerBundle\\Twig\\WebProfilerExtension");
+        $__internal_caf881077a73a7f8e5b84edeb8204f6edeb3d119f387f00628be58e0a97fe25f->enter($__internal_caf881077a73a7f8e5b84edeb8204f6edeb3d119f387f00628be58e0a97fe25f_prof = new Twig_Profiler_Profile($this->getTemplateName(), "template", "client/menu_client.twig"));
 
-        $__internal_4aff3e3e4944046d980c5410d3eea405b85e6698a8af7632768113733b93ea82 = $this->env->getExtension("Symfony\\Bridge\\Twig\\Extension\\ProfilerExtension");
-        $__internal_4aff3e3e4944046d980c5410d3eea405b85e6698a8af7632768113733b93ea82->enter($__internal_4aff3e3e4944046d980c5410d3eea405b85e6698a8af7632768113733b93ea82_prof = new Twig_Profiler_Profile($this->getTemplateName(), "template", "client/menu_client.twig"));
+        $__internal_60c9d884f0a05bdf6fda50f1ea111860acb140704a6ac2e996ea3962acf97821 = $this->env->getExtension("Symfony\\Bridge\\Twig\\Extension\\ProfilerExtension");
+        $__internal_60c9d884f0a05bdf6fda50f1ea111860acb140704a6ac2e996ea3962acf97821->enter($__internal_60c9d884f0a05bdf6fda50f1ea111860acb140704a6ac2e996ea3962acf97821_prof = new Twig_Profiler_Profile($this->getTemplateName(), "template", "client/menu_client.twig"));
 
         // line 1
         echo " <div class=\"container-fluid\">
@@ -30,7 +30,7 @@ class __TwigTemplate_7e0cf4e98db2972e5698a2d72d334f443e4dd34073784bfec28eaf4b7ed
         <span class=\"icon-bar\"></span>
         <span class=\"icon-bar\"></span>
       </button>
-      <a class=\"navbar-brand\" href=\"#\">User : {ID / nom}</a>
+      <a class=\"navbar-brand\" href=\"#\">Client :</a>
     </div>
 
     <div class=\"collapse navbar-collapse\" id=\"bs-example-navbar-collapse-1\">
@@ -58,10 +58,10 @@ class __TwigTemplate_7e0cf4e98db2972e5698a2d72d334f443e4dd34073784bfec28eaf4b7ed
     </div>
   </div>";
         
-        $__internal_0b94ec5801a151ea81e2bb9c967dcef0d0c9c037ecbf525a6182190ffd653a04->leave($__internal_0b94ec5801a151ea81e2bb9c967dcef0d0c9c037ecbf525a6182190ffd653a04_prof);
+        $__internal_caf881077a73a7f8e5b84edeb8204f6edeb3d119f387f00628be58e0a97fe25f->leave($__internal_caf881077a73a7f8e5b84edeb8204f6edeb3d119f387f00628be58e0a97fe25f_prof);
 
         
-        $__internal_4aff3e3e4944046d980c5410d3eea405b85e6698a8af7632768113733b93ea82->leave($__internal_4aff3e3e4944046d980c5410d3eea405b85e6698a8af7632768113733b93ea82_prof);
+        $__internal_60c9d884f0a05bdf6fda50f1ea111860acb140704a6ac2e996ea3962acf97821->leave($__internal_60c9d884f0a05bdf6fda50f1ea111860acb140704a6ac2e996ea3962acf97821_prof);
 
     }
 
@@ -98,7 +98,7 @@ class __TwigTemplate_7e0cf4e98db2972e5698a2d72d334f443e4dd34073784bfec28eaf4b7ed
         <span class=\"icon-bar\"></span>
         <span class=\"icon-bar\"></span>
       </button>
-      <a class=\"navbar-brand\" href=\"#\">User : {ID / nom}</a>
+      <a class=\"navbar-brand\" href=\"#\">Client :</a>
     </div>
 
     <div class=\"collapse navbar-collapse\" id=\"bs-example-navbar-collapse-1\">
