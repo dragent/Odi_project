@@ -36,7 +36,7 @@
               <td>{{ contenir.getQuantiteProduit() }}</td>
               {% for produit in Produit %}
               {% if produit.getRefProduit() == contenir.getRefProduit() %}
-                <td>{{ produit.getPrixProduit() }}</td>
+                <td>{{ produit.getPrixProduit()*contenir.getQuantiteProduit() }}</td>
               {% endif %}
               {% endfor %}
             </tr>
