@@ -14,7 +14,6 @@ namespace Symfony\Component\DependencyInjection\Compiler;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\DefinitionDecorator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
-use Symfony\Component\DependencyInjection\Exception\ExceptionInterface;
 use Symfony\Component\DependencyInjection\Exception\RuntimeException;
 
 /**
@@ -97,21 +96,8 @@ class ResolveDefinitionTemplatesPass implements CompilerPassInterface
      */
     private function resolveDefinition(ContainerBuilder $container, DefinitionDecorator $definition)
     {
-        try {
-            return $this->doResolveDefinition($container, $definition);
-        } catch (ExceptionInterface $e) {
-            $r = new \ReflectionProperty($e, 'message');
-            $r->setAccessible(true);
-            $r->setValue($e, sprintf('Service "%s": %s', $this->currentId, $e->getMessage()));
-
-            throw $e;
-        }
-    }
-
-    private function doResolveDefinition(ContainerBuilder $container, DefinitionDecorator $definition)
-    {
         if (!$container->has($parent = $definition->getParent())) {
-            throw new RuntimeException(sprintf('Parent definition "%s" does not exist.', $parent));
+            throw new RuntimeException(sprintf('The parent definition "%s" defined for definition "%s" does not exist.', $parent, $this->currentId));
         }
 
         $parentDef = $container->findDefinition($parent);

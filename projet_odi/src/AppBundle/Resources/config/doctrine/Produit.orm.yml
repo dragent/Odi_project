@@ -25,5 +25,6 @@ AppBundle\Entity\Produit:
             type: date
         photo_produit:
             type: string
+            nullable: true
         visible_produit:
             type: boolean

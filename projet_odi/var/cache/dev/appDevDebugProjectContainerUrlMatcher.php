@@ -71,11 +71,6 @@ class appDevDebugProjectContainerUrlMatcher extends Symfony\Bundle\FrameworkBund
                     return $this->mergeDefaults(array_replace($matches, array('_route' => '_profiler_search_results')), array (  '_controller' => 'web_profiler.controller.profiler:searchResultsAction',));
                 }
 
-                // _profiler_open_file
-                if ($pathinfo === '/_profiler/open') {
-                    return array (  '_controller' => 'web_profiler.controller.profiler:openAction',  '_route' => '_profiler_open_file',);
-                }
-
                 // _profiler
                 if (preg_match('#^/_profiler/(?P<token>[^/]++)$#s', $pathinfo, $matches)) {
                     return $this->mergeDefaults(array_replace($matches, array('_route' => '_profiler')), array (  '_controller' => 'web_profiler.controller.profiler:panelAction',));
@@ -114,9 +109,9 @@ class appDevDebugProjectContainerUrlMatcher extends Symfony\Bundle\FrameworkBund
             return array (  '_controller' => 'AppBundle\\Controller\\DefaultController::indexAction',  '_route' => 'homepage',);
         }
 
-        // liste_produits
-        if ($pathinfo === '/produits/liste_produits') {
-            return array (  '_controller' => 'AppBundle\\Controller\\ListeProduitsController::listAction',  '_route' => 'liste_produits',);
+        // listProduit
+        if (0 === strpos($pathinfo, '/produits/list') && preg_match('#^/produits/list(?:\\.(?P<_format>[^/]++))?$#s', $pathinfo, $matches)) {
+            return $this->mergeDefaults(array_replace($matches, array('_route' => 'listProduit')), array (  '_controller' => 'AppBundle\\Controller\\ProduitController::listProduitAction',  '_format' => 'html',));
         }
 
         if (0 === strpos($pathinfo, '/client')) {
@@ -178,6 +173,68 @@ class appDevDebugProjectContainerUrlMatcher extends Symfony\Bundle\FrameworkBund
                 return $this->mergeDefaults(array_replace($matches, array('_route' => 'gestion_panier_valider_magasinier')), array (  '_controller' => 'AppBundle\\Controller\\GestionPaniersMagasinierController::gestionPanierValiderAction',));
             }
 
+            if (0 === strpos($pathinfo, '/magasinier/produits/list')) {
+                // listMagasinierProduit
+                if ($pathinfo === '/magasinier/produits/list') {
+                    return array (  '_controller' => 'AppBundle\\Controller\\ProduitController::listMagasinierProduitAction',  '_route' => 'listMagasinierProduit',);
+                }
+
+                // listStockProduit
+                if (0 === strpos($pathinfo, '/magasinier/produits/list/stock') && preg_match('#^/magasinier/produits/list/stock(?:\\.(?P<_format>[^/]++))?$#s', $pathinfo, $matches)) {
+                    return $this->mergeDefaults(array_replace($matches, array('_route' => 'listStockProduit')), array (  '_controller' => 'AppBundle\\Controller\\ProduitController::listStocksProduitAction',  '_format' => 'html',));
+                }
+
+            }
+
+            // listAlerte
+            if ($pathinfo === '/magasinier/alertes/list') {
+                return array('_route' => 'listAlerte');
+            }
+
+            if (0 === strpos($pathinfo, '/magasinier/produits')) {
+                if (0 === strpos($pathinfo, '/magasinier/produits/update')) {
+                    // updateProduit
+                    if (preg_match('#^/magasinier/produits/update/(?P<numero>[^/]++)$#s', $pathinfo, $matches)) {
+                        return $this->mergeDefaults(array_replace($matches, array('_route' => 'updateProduit')), array (  '_controller' => 'AppBundle\\Controller\\ProduitController::updateProduitAction',));
+                    }
+
+                    // updateStock
+                    if (0 === strpos($pathinfo, '/magasinier/produits/update/stock') && preg_match('#^/magasinier/produits/update/stock/(?P<numero>[^/]++)$#s', $pathinfo, $matches)) {
+                        return $this->mergeDefaults(array_replace($matches, array('_route' => 'updateStock')), array (  '_controller' => 'AppBundle\\Controller\\ProduitController::updateStockProduitAction',));
+                    }
+
+                }
+
+                // ajoutProduit
+                if ($pathinfo === '/magasinier/produits/ajout') {
+                    return array (  '_controller' => 'AppBundle\\Controller\\ProduitController::addProduitAction',  '_route' => 'ajoutProduit',);
+                }
+
+            }
+
+        }
+
+        if (0 === strpos($pathinfo, '/personne')) {
+            // affichePersonne
+            if ($pathinfo === '/personne/list') {
+                return array (  '_controller' => 'AppBundle\\Controller\\PersonneController::indexAction',  '_route' => 'affichePersonne',);
+            }
+
+            // montrePersonne
+            if ($pathinfo === '/personne/show') {
+                return array (  '_controller' => 'AppBundle\\Controller\\PersonneController::showAction',  '_route' => 'montrePersonne',);
+            }
+
+            // personne_new
+            if ($pathinfo === '/personne/new') {
+                return array (  '_controller' => 'AppBundle\\Controller\\PersonneController::newAction',  '_route' => 'personne_new',);
+            }
+
+        }
+
+        // identification
+        if ($pathinfo === '/identification') {
+            return array (  '_controller' => 'AppBundle\\Controller\\PersonneController::identificationAction',  '_route' => 'identification',);
         }
 
         throw 0 < count($allow) ? new MethodNotAllowedException(array_unique($allow)) : new ResourceNotFoundException();

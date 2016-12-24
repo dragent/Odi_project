@@ -15,7 +15,6 @@ use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\Constraints\Callback;
 use Symfony\Component\Validator\Constraints\CallbackValidator;
 use Symfony\Component\Validator\Context\ExecutionContextInterface;
-use Symfony\Component\Validator\Test\ConstraintValidatorTestCase;
 
 class CallbackValidatorTest_Class
 {
@@ -44,7 +43,7 @@ class CallbackValidatorTest_Object
     }
 }
 
-class CallbackValidatorTest extends ConstraintValidatorTestCase
+class CallbackValidatorTest extends AbstractConstraintValidatorTest
 {
     protected function createValidator()
     {

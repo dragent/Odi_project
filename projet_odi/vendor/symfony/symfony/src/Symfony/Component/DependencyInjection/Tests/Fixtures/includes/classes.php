@@ -59,20 +59,3 @@ class BarUserClass
         $this->bar = $bar;
     }
 }
-
-class MethodCallClass
-{
-    public $simple;
-    public $complex;
-    private $callPassed = false;
-
-    public function callMe()
-    {
-        $this->callPassed = is_scalar($this->simple) && is_object($this->complex);
-    }
-
-    public function callPassed()
-    {
-        return $this->callPassed;
-    }
-}

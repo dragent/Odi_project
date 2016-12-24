@@ -93,7 +93,7 @@ class Definition
     public function setDecoratedService($id, $renamedId = null, $priority = 0)
     {
         if ($renamedId && $id == $renamedId) {
-            throw new InvalidArgumentException(sprintf('The decorated service inner name for "%s" must be different than the service name itself.', $id));
+            throw new \InvalidArgumentException(sprintf('The decorated service inner name for "%s" must be different than the service name itself.', $id));
         }
 
         if (null === $id) {
@@ -612,17 +612,13 @@ class Definition
     /**
      * Sets a configurator to call after the service is fully initialized.
      *
-     * @param string|array $configurator A PHP callable
+     * @param callable $callable A PHP callable
      *
      * @return Definition The current instance
      */
-    public function setConfigurator($configurator)
+    public function setConfigurator($callable)
     {
-        if (is_string($configurator) && strpos($configurator, '::') !== false) {
-            $configurator = explode('::', $configurator, 2);
-        }
-
-        $this->configurator = $configurator;
+        $this->configurator = $callable;
 
         return $this;
     }

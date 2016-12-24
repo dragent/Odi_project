@@ -13,9 +13,6 @@ use AppBundle\Entity\Contenir;
 
 class CreationPanierController extends Controller
 {
-	/**
-	 * @Route("/", name="homepage")
-	 */
 	public function indexAction(Request $request)
 	{
 		return $this->render('client/creation_panier_client.twig');

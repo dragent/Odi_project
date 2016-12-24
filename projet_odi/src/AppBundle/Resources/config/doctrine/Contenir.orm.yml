@@ -9,6 +9,7 @@ AppBundle\Entity\Contenir:
             type: datetime
         quantite_produit_geree:
             type: integer
+            nullable: true
     id:
         id_panier:
             targetEntity: Panier

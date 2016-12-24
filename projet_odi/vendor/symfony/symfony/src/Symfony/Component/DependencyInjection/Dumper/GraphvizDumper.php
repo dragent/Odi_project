@@ -81,7 +81,7 @@ class GraphvizDumper extends Dumper
             }
         }
 
-        return $this->container->resolveEnvPlaceholders($this->startDot().$this->addNodes().$this->addEdges().$this->endDot(), '__ENV_%s__');
+        return $this->startDot().$this->addNodes().$this->addEdges().$this->endDot();
     }
 
     /**
@@ -180,12 +180,14 @@ class GraphvizDumper extends Dumper
         }
 
         foreach ($container->getServiceIds() as $id) {
+            $service = $container->get($id);
+
             if (array_key_exists($id, $container->getAliases())) {
                 continue;
             }
 
             if (!$container->hasDefinition($id)) {
-                $class = get_class('service_container' === $id ? $this->container : $container->get($id));
+                $class = ('service_container' === $id) ? get_class($this->container) : get_class($service);
                 $nodes[$id] = array('class' => str_replace('\\', '\\\\', $class), 'attributes' => $this->options['node.instance']);
             }
         }

@@ -1,0 +1,17 @@
+{% extends 'base.html.twig' %}
+
+{% block header %}
+  <div class="page-header">
+    <h2 class="centrer isoler">Créer une nouvelle personne</h2>
+  </div>
+{% endblock %}
+
+{% block section %}
+
+    {{ form_start(form) }}
+    {{ form_errors(form) }}
+    {{ form_widget(form) }}
+    {{ form_end(form) }}
+
+    <p class="isoler"><a href="{{ path('affichePersonne') }}" class="btn btn-primary">Retourner à la liste</a></p>
+{% endblock %}

@@ -3,16 +3,14 @@
 /* foo.twig */
 class __TwigTemplate_VarDumperFixture_u75a09 extends Twig_Template
 {
-    private $path;
+    private $filename;
 
-    public function __construct(Twig_Environment $env = null, $path = null)
+    public function __construct(Twig_Environment $env, $filename = 'bar.twig')
     {
-        if (null !== $env) {
-            parent::__construct($env);
-        }
+        parent::__construct($env);
         $this->parent = false;
         $this->blocks = array();
-        $this->path = $path;
+        $this->filename = $filename;
     }
 
     protected function doDisplay(array $context, array $blocks = array())
@@ -28,11 +26,11 @@ class __TwigTemplate_VarDumperFixture_u75a09 extends Twig_Template
 
     public function getDebugInfo()
     {
-        return array(20 => 1, 21 => 2);
+        return array(19 => 2);
     }
 
     public function getSourceContext()
     {
-        return new Twig_Source("   foo bar\n     twig source\n\n", 'foo.twig', $this->path ?: __FILE__);
+        return new Twig_Source("   foo bar\n     twig source\n\n", 'foo.twig', $this->filename);
     }
 }

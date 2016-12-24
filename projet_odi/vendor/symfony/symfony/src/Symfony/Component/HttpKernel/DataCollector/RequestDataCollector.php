@@ -12,8 +12,10 @@
 namespace Symfony\Component\HttpKernel\DataCollector;
 
 use Symfony\Component\HttpFoundation\ParameterBag;
+use Symfony\Component\HttpFoundation\HeaderBag;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
@@ -50,13 +52,17 @@ class RequestDataCollector extends DataCollector implements EventSubscriberInter
 
         // attributes are serialized and as they can be anything, they need to be converted to strings.
         $attributes = array();
-        $route = '';
         foreach ($request->attributes->all() as $key => $value) {
-            if ('_route' === $key) {
-                $route = is_object($value) ? $value->getPath() : $value;
-                $attributes[$key] = $route;
-            } else {
+            if ('_route' === $key && is_object($value)) {
+                $attributes[$key] = $this->varToString($value->getPath());
+            } elseif ('_route_params' === $key) {
+                // we need to keep route params as an array (see getRouteParams())
+                foreach ($value as $k => $v) {
+                    $value[$k] = $this->varToString($v);
+                }
                 $attributes[$key] = $value;
+            } else {
+                $attributes[$key] = $this->varToString($value);
             }
         }
 
@@ -98,7 +104,6 @@ class RequestDataCollector extends DataCollector implements EventSubscriberInter
             'request_server' => $request->server->all(),
             'request_cookies' => $request->cookies->all(),
             'request_attributes' => $attributes,
-            'route' => $route,
             'response_headers' => $responseHeaders,
             'session_metadata' => $sessionMetadata,
             'session_attributes' => $sessionAttributes,
@@ -118,18 +123,6 @@ class RequestDataCollector extends DataCollector implements EventSubscriberInter
 
         if (isset($this->data['request_request']['_password'])) {
             $this->data['request_request']['_password'] = '******';
-        }
-
-        foreach ($this->data as $key => $value) {
-            if (!is_array($value)) {
-                continue;
-            }
-            if ('request_headers' === $key || 'response_headers' === $key) {
-                $value = array_map(function ($v) { return isset($v[1]) ? $v : $v[0]; }, $value);
-            }
-            if ('request_server' !== $key && 'request_cookies' !== $key) {
-                $this->data[$key] = array_map(array($this, 'cloneVar'), $value);
-            }
         }
 
         if (isset($this->controllers[$request])) {
@@ -177,17 +170,17 @@ class RequestDataCollector extends DataCollector implements EventSubscriberInter
 
     public function getRequestHeaders()
     {
-        return new ParameterBag($this->data['request_headers']);
+        return new HeaderBag($this->data['request_headers']);
     }
 
-    public function getRequestServer($raw = false)
+    public function getRequestServer()
     {
-        return new ParameterBag($raw ? $this->data['request_server'] : array_map(array($this, 'cloneVar'), $this->data['request_server']));
+        return new ParameterBag($this->data['request_server']);
     }
 
-    public function getRequestCookies($raw = false)
+    public function getRequestCookies()
     {
-        return new ParameterBag($raw ? $this->data['request_cookies'] : array_map(array($this, 'cloneVar'), $this->data['request_cookies']));
+        return new ParameterBag($this->data['request_cookies']);
     }
 
     public function getRequestAttributes()
@@ -197,7 +190,7 @@ class RequestDataCollector extends DataCollector implements EventSubscriberInter
 
     public function getResponseHeaders()
     {
-        return new ParameterBag($this->data['response_headers']);
+        return new ResponseHeaderBag($this->data['response_headers']);
     }
 
     public function getSessionMetadata()
@@ -254,12 +247,7 @@ class RequestDataCollector extends DataCollector implements EventSubscriberInter
      */
     public function getRoute()
     {
-        return $this->data['route'];
-    }
-
-    public function getIdentifier()
-    {
-        return $this->data['route'] ?: (is_array($this->data['controller']) ? $this->data['controller']['class'].'::'.$this->data['controller']['method'].'()' : $this->data['controller']);
+        return isset($this->data['request_attributes']['_route']) ? $this->data['request_attributes']['_route'] : '';
     }
 
     /**
@@ -271,22 +259,7 @@ class RequestDataCollector extends DataCollector implements EventSubscriberInter
      */
     public function getRouteParams()
     {
-        if (!isset($this->data['request_attributes']['_route_params'])) {
-            return array();
-        }
-
-        $data = $this->data['request_attributes']['_route_params'];
-        $rawData = $data->getRawData();
-        if (!isset($rawData[1])) {
-            return array();
-        }
-
-        $params = array();
-        foreach ($rawData[1] as $k => $v) {
-            $params[$k] = $data->seek($k);
-        }
-
-        return $params;
+        return isset($this->data['request_attributes']['_route_params']) ? $this->data['request_attributes']['_route_params'] : array();
     }
 
     /**

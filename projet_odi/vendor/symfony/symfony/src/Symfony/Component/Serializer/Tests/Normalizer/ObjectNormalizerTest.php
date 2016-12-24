@@ -23,7 +23,6 @@ use Symfony\Component\Serializer\Serializer;
 use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
 use Symfony\Component\Serializer\Tests\Fixtures\CircularReferenceDummy;
-use Symfony\Component\Serializer\Tests\Fixtures\DenormalizerDecoratorSerializer;
 use Symfony\Component\Serializer\Tests\Fixtures\MaxDepthDummy;
 use Symfony\Component\Serializer\Tests\Fixtures\SiblingHolder;
 use Symfony\Component\Serializer\Mapping\Loader\AnnotationLoader;
@@ -158,49 +157,6 @@ class ObjectNormalizerTest extends \PHPUnit_Framework_TestCase
         $obj = $this->normalizer->denormalize($data, __NAMESPACE__.'\ObjectConstructorDummy', 'any');
         $this->assertEquals('foo', $obj->getFoo());
         $this->assertEquals('bar', $obj->bar);
-    }
-
-    public function testConstructorWithObjectTypeHintDenormalize()
-    {
-        $data = array(
-            'id' => 10,
-            'inner' => array(
-                'foo' => 'oof',
-                'bar' => 'rab',
-            ),
-        );
-
-        $normalizer = new ObjectNormalizer();
-        $serializer = new DenormalizerDecoratorSerializer($normalizer);
-        $normalizer->setSerializer($serializer);
-
-        $obj = $normalizer->denormalize($data, DummyWithConstructorObject::class);
-        $this->assertInstanceOf(DummyWithConstructorObject::class, $obj);
-        $this->assertEquals(10, $obj->getId());
-        $this->assertInstanceOf(ObjectInner::class, $obj->getInner());
-        $this->assertEquals('oof', $obj->getInner()->foo);
-        $this->assertEquals('rab', $obj->getInner()->bar);
-    }
-
-    /**
-     * @expectedException \Symfony\Component\Serializer\Exception\RuntimeException
-     * @expectedExceptionMessage Could not determine the class of the parameter "unknown".
-     */
-    public function testConstructorWithUnknownObjectTypeHintDenormalize()
-    {
-        $data = array(
-            'id' => 10,
-            'unknown' => array(
-                'foo' => 'oof',
-                'bar' => 'rab',
-            ),
-        );
-
-        $normalizer = new ObjectNormalizer();
-        $serializer = new DenormalizerDecoratorSerializer($normalizer);
-        $normalizer->setSerializer($serializer);
-
-        $normalizer->denormalize($data, DummyWithConstructorInexistingObject::class);
     }
 
     public function testGroupsNormalize()
@@ -377,8 +333,8 @@ class ObjectNormalizerTest extends \PHPUnit_Framework_TestCase
             array(
                 array(
                     'bar' => function ($bar) {
-                        return 'baz';
-                    },
+                            return 'baz';
+                        },
                 ),
                 'baz',
                 array('foo' => '', 'bar' => 'baz', 'baz' => true),
@@ -387,8 +343,8 @@ class ObjectNormalizerTest extends \PHPUnit_Framework_TestCase
             array(
                 array(
                     'bar' => function ($bar) {
-                        return;
-                    },
+                            return;
+                        },
                 ),
                 'baz',
                 array('foo' => '', 'bar' => null, 'baz' => true),
@@ -397,8 +353,8 @@ class ObjectNormalizerTest extends \PHPUnit_Framework_TestCase
             array(
                 array(
                     'bar' => function ($bar) {
-                        return $bar->format('d-m-Y H:i:s');
-                    },
+                            return $bar->format('d-m-Y H:i:s');
+                        },
                 ),
                 new \DateTime('2011-09-10 06:30:00'),
                 array('foo' => '', 'bar' => '10-09-2011 06:30:00', 'baz' => true),
@@ -407,13 +363,13 @@ class ObjectNormalizerTest extends \PHPUnit_Framework_TestCase
             array(
                 array(
                     'bar' => function ($bars) {
-                        $foos = '';
-                        foreach ($bars as $bar) {
-                            $foos .= $bar->getFoo();
-                        }
+                            $foos = '';
+                            foreach ($bars as $bar) {
+                                $foos .= $bar->getFoo();
+                            }
 
-                        return $foos;
-                    },
+                            return $foos;
+                        },
                 ),
                 array(new ObjectConstructorDummy('baz', '', false), new ObjectConstructorDummy('quux', '', false)),
                 array('foo' => '', 'bar' => 'bazquux', 'baz' => true),
@@ -422,8 +378,8 @@ class ObjectNormalizerTest extends \PHPUnit_Framework_TestCase
             array(
                 array(
                     'bar' => function ($bars) {
-                        return count($bars);
-                    },
+                            return count($bars);
+                        },
                 ),
                 array(new ObjectConstructorDummy('baz', '', false), new ObjectConstructorDummy('quux', '', false)),
                 array('foo' => '', 'bar' => 2, 'baz' => true),
@@ -862,34 +818,5 @@ class FormatAndContextAwareNormalizer extends ObjectNormalizer
         }
 
         return false;
-    }
-}
-
-class DummyWithConstructorObject
-{
-    private $id;
-    private $inner;
-
-    public function __construct($id, ObjectInner $inner)
-    {
-        $this->id = $id;
-        $this->inner = $inner;
-    }
-
-    public function getId()
-    {
-        return $this->id;
-    }
-
-    public function getInner()
-    {
-        return $this->inner;
-    }
-}
-
-class DummyWithConstructorInexistingObject
-{
-    public function __construct($id, Unknown $unknown)
-    {
     }
 }

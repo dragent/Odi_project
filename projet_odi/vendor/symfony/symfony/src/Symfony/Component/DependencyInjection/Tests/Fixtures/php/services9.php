@@ -49,13 +49,6 @@ class ProjectServiceContainer extends Container
             'request' => 'getRequestService',
             'service_from_static_method' => 'getServiceFromStaticMethodService',
         );
-        $this->privates = array(
-            'configurator_service' => true,
-            'configurator_service_simple' => true,
-            'factory_simple' => true,
-            'inlined' => true,
-            'new_factory' => true,
-        );
         $this->aliases = array(
             'alias_for_alias' => 'foo',
             'alias_for_foo' => 'foo',
@@ -110,7 +103,7 @@ class ProjectServiceContainer extends Container
     {
         $this->services['configured_service'] = $instance = new \stdClass();
 
-        ${($_ = isset($this->services['configurator_service']) ? $this->services['configurator_service'] : $this->getConfiguratorServiceService()) && false ?: '_'}->configureStdClass($instance);
+        $this->get('configurator_service')->configureStdClass($instance);
 
         return $instance;
     }
@@ -127,7 +120,7 @@ class ProjectServiceContainer extends Container
     {
         $this->services['configured_service_simple'] = $instance = new \stdClass();
 
-        ${($_ = isset($this->services['configurator_service_simple']) ? $this->services['configurator_service_simple'] : $this->getConfiguratorServiceSimpleService()) && false ?: '_'}->configureStdClass($instance);
+        $this->get('configurator_service_simple')->configureStdClass($instance);
 
         return $instance;
     }
@@ -211,7 +204,7 @@ class ProjectServiceContainer extends Container
      */
     protected function getFactoryServiceSimpleService()
     {
-        return $this->services['factory_service_simple'] = ${($_ = isset($this->services['factory_simple']) ? $this->services['factory_simple'] : $this->getFactorySimpleService()) && false ?: '_'}->getInstance();
+        return $this->services['factory_service_simple'] = $this->get('factory_simple')->getInstance();
     }
 
     /**
@@ -228,11 +221,11 @@ class ProjectServiceContainer extends Container
 
         $this->services['foo'] = $instance = \Bar\FooClass::getInstance('foo', $a, array($this->getParameter('foo') => 'foo is '.$this->getParameter('foo').'', 'foobar' => $this->getParameter('foo')), true, $this);
 
+        $instance->setBar($this->get('bar'));
+        $instance->initialize();
         $instance->foo = 'bar';
         $instance->moo = $a;
         $instance->qux = array($this->getParameter('foo') => 'foo is '.$this->getParameter('foo').'', 'foobar' => $this->getParameter('foo'));
-        $instance->setBar($this->get('bar'));
-        $instance->initialize();
         sc_configure($instance);
 
         return $instance;
@@ -279,7 +272,7 @@ class ProjectServiceContainer extends Container
     {
         $this->services['foo_with_inline'] = $instance = new \Foo();
 
-        $instance->setBar(${($_ = isset($this->services['inlined']) ? $this->services['inlined'] : $this->getInlinedService()) && false ?: '_'});
+        $instance->setBar($this->get('inlined'));
 
         return $instance;
     }
@@ -321,7 +314,7 @@ class ProjectServiceContainer extends Container
      */
     protected function getNewFactoryServiceService()
     {
-        $this->services['new_factory_service'] = $instance = ${($_ = isset($this->services['new_factory']) ? $this->services['new_factory'] : $this->getNewFactoryService()) && false ?: '_'}->getInstance();
+        $this->services['new_factory_service'] = $instance = $this->get('new_factory')->getInstance();
 
         $instance->foo = 'bar';
 
@@ -425,8 +418,8 @@ class ProjectServiceContainer extends Container
     {
         $this->services['inlined'] = $instance = new \Bar();
 
-        $instance->pub = 'pub';
         $instance->setBaz($this->get('baz'));
+        $instance->pub = 'pub';
 
         return $instance;
     }

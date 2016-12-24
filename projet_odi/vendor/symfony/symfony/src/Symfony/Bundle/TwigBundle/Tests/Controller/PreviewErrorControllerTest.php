@@ -33,6 +33,7 @@ class PreviewErrorControllerTest extends TestCase
             ->method('handle')
             ->with(
                 $this->callback(function (Request $request) use ($logicalControllerName, $code) {
+
                     $this->assertEquals($logicalControllerName, $request->attributes->get('_controller'));
 
                     $exception = $request->attributes->get('exception');

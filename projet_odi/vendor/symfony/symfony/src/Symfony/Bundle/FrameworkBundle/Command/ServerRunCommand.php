@@ -15,12 +15,9 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Process\PhpExecutableFinder;
-use Symfony\Component\Process\Process;
 use Symfony\Component\Process\ProcessBuilder;
-use Symfony\Component\Process\Exception\RuntimeException;
 
 /**
  * Runs Symfony application using PHP built-in web server.
@@ -116,23 +113,14 @@ EOF
         $builder->setWorkingDirectory($documentRoot);
         $builder->setTimeout(null);
         $process = $builder->getProcess();
-        $callback = null;
 
-        if (OutputInterface::VERBOSITY_NORMAL > $output->getVerbosity()) {
+        if (OutputInterface::VERBOSITY_VERBOSE > $output->getVerbosity()) {
             $process->disableOutput();
-        } else {
-            try {
-                $process->setTty(true);
-            } catch (RuntimeException $e) {
-                $callback = function ($type, $buffer) use ($output) {
-                    if (Process::ERR === $type && $output instanceof ConsoleOutputInterface) {
-                        $output = $output->getErrorOutput();
-                    }
-                    $output->write($buffer, false, OutputInterface::OUTPUT_RAW);
-                };
-            }
         }
-        $process->run($callback);
+
+        $this
+            ->getHelper('process')
+            ->run($output, $process, null, null, OutputInterface::VERBOSITY_VERBOSE);
 
         if (!$process->isSuccessful()) {
             $errorMessages = array('Built-in server terminated unexpectedly.');

@@ -31,15 +31,14 @@ framework:
     fragments:       ~
     http_method_override: true
     assets: ~
-    php_errors:
-        log: true
-
 
 # Twig Configuration
 twig:
     debug:            "%kernel.debug%"
     strict_variables: "%kernel.debug%"
-
+    form-themes:
+        - "bootstrap_3_layout.html.twig"
+        - "form/fields.html.twig"
 # Doctrine Configuration
 doctrine:
     dbal:

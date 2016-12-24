@@ -21,22 +21,6 @@ class MaxDepthTest extends \PHPUnit_Framework_TestCase
     /**
      * @expectedException \Symfony\Component\Serializer\Exception\InvalidArgumentException
      */
-    public function testNotSetMaxDepthParameter()
-    {
-        new MaxDepth(array());
-    }
-
-    /**
-     * @expectedException \Symfony\Component\Serializer\Exception\InvalidArgumentException
-     */
-    public function testEmptyMaxDepthParameter()
-    {
-        new MaxDepth(array('value' => ''));
-    }
-
-    /**
-     * @expectedException \Symfony\Component\Serializer\Exception\InvalidArgumentException
-     */
     public function testNotAnIntMaxDepthParameter()
     {
         new MaxDepth(array('value' => 'foo'));
@@ -44,7 +28,9 @@ class MaxDepthTest extends \PHPUnit_Framework_TestCase
 
     public function testMaxDepthParameters()
     {
-        $maxDepth = new MaxDepth(array('value' => 3));
-        $this->assertEquals(3, $maxDepth->getMaxDepth());
+        $validData = 3;
+
+        $groups = new MaxDepth(array('value' => 3));
+        $this->assertEquals($validData, $groups->getMaxDepth());
     }
 }

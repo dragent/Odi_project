@@ -146,10 +146,6 @@ class Router extends BaseRouter implements WarmableInterface
                 return '%%';
             }
 
-            if (preg_match('/^env\(\w+\)$/', $match[1])) {
-                throw new RuntimeException(sprintf('Using "%%%s%%" is not allowed in routing configuration.', $match[1]));
-            }
-
             $resolved = $container->getParameter($match[1]);
 
             if (is_string($resolved) || is_numeric($resolved)) {
@@ -164,6 +160,7 @@ class Router extends BaseRouter implements WarmableInterface
                 gettype($resolved)
                 )
             );
+
         }, $value);
 
         return str_replace('%%', '%', $escapedValue);

@@ -6,18 +6,17 @@
         <span class="icon-bar"></span>
         <span class="icon-bar"></span>
       </button>
-      <a class="navbar-brand" href="#">Client :</a>
+      <a class="navbar-brand" href="#">User : {ID / nom}</a>
     </div>
 
     <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
       <ul class="nav navbar-nav">
-        <li><a  href="{{ path('liste_produits') }}">Liste des produits</a></li>
+        <li><a href="{{ path('listProduit') }}">Liste des produits</a></li>
         <li><a href="{{ path('panier_client') }}">Creation/Reprise d'un panier</a></li>
         <li><a href="{{ path('liste_paniers_client') }}">Liste des paniers</a></li>
-        <li><a href="{{ path('liste_paniers_magasinier') }}">(Bouton : gestion paniers magasinier)</a></li>
       </ul>
       <ul class="nav navbar-nav navbar-right">
-        <li><a href="#">logout</a></li>
+        <li><a href="#">Déconnexion</a></li>
       </ul>
     </div>
   </div>

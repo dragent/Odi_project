@@ -58,18 +58,18 @@ class ArrayAdapter implements AdapterInterface, LoggerAwareInterface
         $isHit = $this->hasItem($key);
         try {
             if (!$isHit) {
-                $this->values[$key] = $value = null;
+                $value = null;
             } elseif (!$this->storeSerialized) {
                 $value = $this->values[$key];
             } elseif ('b:0;' === $value = $this->values[$key]) {
                 $value = false;
             } elseif (false === $value = unserialize($value)) {
-                $this->values[$key] = $value = null;
+                $value = null;
                 $isHit = false;
             }
         } catch (\Exception $e) {
             CacheItem::log($this->logger, 'Failed to unserialize key "{key}"', array('key' => $key, 'exception' => $e));
-            $this->values[$key] = $value = null;
+            $value = null;
             $isHit = false;
         }
         $f = $this->createCacheItem;
@@ -87,16 +87,6 @@ class ArrayAdapter implements AdapterInterface, LoggerAwareInterface
         }
 
         return $this->generateItems($keys, time());
-    }
-
-    /**
-     * Returns all cached values, with cache miss as null.
-     *
-     * @return array
-     */
-    public function getValues()
-    {
-        return $this->values;
     }
 
     /**
@@ -204,18 +194,18 @@ class ArrayAdapter implements AdapterInterface, LoggerAwareInterface
         foreach ($keys as $i => $key) {
             try {
                 if (!$isHit = isset($this->expiries[$key]) && ($this->expiries[$key] >= $now || !$this->deleteItem($key))) {
-                    $this->values[$key] = $value = null;
+                    $value = null;
                 } elseif (!$this->storeSerialized) {
                     $value = $this->values[$key];
                 } elseif ('b:0;' === $value = $this->values[$key]) {
                     $value = false;
                 } elseif (false === $value = unserialize($value)) {
-                    $this->values[$key] = $value = null;
+                    $value = null;
                     $isHit = false;
                 }
             } catch (\Exception $e) {
                 CacheItem::log($this->logger, 'Failed to unserialize key "{key}"', array('key' => $key, 'exception' => $e));
-                $this->values[$key] = $value = null;
+                $value = null;
                 $isHit = false;
             }
             unset($keys[$i]);

@@ -11,9 +11,6 @@ use AppBundle\Entity\Produit;
 
 class ListePaniersController extends Controller
 {
-	/**
-	 * @Route("/", name="homepage")
-	 */
 	public function listPaniersAction(Request $request)
 	{
 		$em = $this->getDoctrine()->getManager();

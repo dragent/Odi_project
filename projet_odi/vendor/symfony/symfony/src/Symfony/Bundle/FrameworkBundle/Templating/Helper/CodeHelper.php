@@ -11,7 +11,6 @@
 
 namespace Symfony\Bundle\FrameworkBundle\Templating\Helper;
 
-use Symfony\Component\HttpKernel\Debug\FileLinkFormatter;
 use Symfony\Component\Templating\Helper\Helper;
 
 /**
@@ -28,9 +27,9 @@ class CodeHelper extends Helper
     /**
      * Constructor.
      *
-     * @param string|FileLinkFormatter $fileLinkFormat The format for links to source files
-     * @param string                   $rootDir        The project root directory
-     * @param string                   $charset        The charset
+     * @param string $fileLinkFormat The format for links to source files
+     * @param string $rootDir        The project root directory
+     * @param string $charset        The charset
      */
     public function __construct($fileLinkFormat, $rootDir, $charset)
     {
@@ -186,8 +185,8 @@ class CodeHelper extends Helper
      */
     public function getFileLink($file, $line)
     {
-        if ($fmt = $this->fileLinkFormat) {
-            return is_string($fmt) ? strtr($fmt, array('%f' => $file, '%l' => $line)) : $fmt->format($file, $line);
+        if ($this->fileLinkFormat && is_file($file)) {
+            return strtr($this->fileLinkFormat, array('%f' => $file, '%l' => $line));
         }
 
         return false;

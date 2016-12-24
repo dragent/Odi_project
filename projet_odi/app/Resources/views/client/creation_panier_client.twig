@@ -5,11 +5,12 @@
 {% endblock %}
 
 {% block header %}
+    <div class="page-header">
+      <h2 class="centrer isoler">Création d'un panier</h2>
+    </div>
 {% endblock %}
 
 {% block section %}
-    <h2>Creation de panier : <a href="{{ path('creation_panier_client') }}" class="btn btn-primary">Nouveau Panier (ou reprise du precedent)</a></h2>
+    <p class="centrer"><a href="{{ path('creation_panier_client') }}" class="btn btn-primary">Nouveau Panier (ou reprise du precedent)</a></p>
 {% endblock %}
 
-{% block footer %}
-{% endblock %}

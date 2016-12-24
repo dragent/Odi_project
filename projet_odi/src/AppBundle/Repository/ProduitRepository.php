@@ -10,4 +10,10 @@ namespace AppBundle\Repository;
  */
 class ProduitRepository extends \Doctrine\ORM\EntityRepository
 {
+	public function findList(){
+        
+        $orderby = array('ref_produit' => 'ASC');
+        
+        return $this->findBy(array(), $orderby);
+    }
 }

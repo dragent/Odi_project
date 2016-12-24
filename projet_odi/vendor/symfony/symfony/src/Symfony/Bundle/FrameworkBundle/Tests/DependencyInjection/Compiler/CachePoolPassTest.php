@@ -29,10 +29,6 @@ class CachePoolPassTest extends \PHPUnit_Framework_TestCase
     public function testNamespaceArgumentIsReplaced()
     {
         $container = new ContainerBuilder();
-        $container->setParameter('kernel.debug', false);
-        $container->setParameter('kernel.name', 'app');
-        $container->setParameter('kernel.environment', 'prod');
-        $container->setParameter('kernel.root_dir', 'foo');
         $adapter = new Definition();
         $adapter->setAbstract(true);
         $adapter->addTag('cache.pool');
@@ -45,16 +41,12 @@ class CachePoolPassTest extends \PHPUnit_Framework_TestCase
 
         $this->cachePoolPass->process($container);
 
-        $this->assertSame('C42Pcl9VBJ', $cachePool->getArgument(0));
+        $this->assertSame('VcRIZlUhEv', $cachePool->getArgument(0));
     }
 
     public function testArgsAreReplaced()
     {
         $container = new ContainerBuilder();
-        $container->setParameter('kernel.debug', false);
-        $container->setParameter('kernel.name', 'app');
-        $container->setParameter('kernel.environment', 'prod');
-        $container->setParameter('cache.prefix.seed', 'foo');
         $cachePool = new Definition();
         $cachePool->addTag('cache.pool', array(
             'provider' => 'foobar',
@@ -69,7 +61,7 @@ class CachePoolPassTest extends \PHPUnit_Framework_TestCase
 
         $this->assertInstanceOf(Reference::class, $cachePool->getArgument(0));
         $this->assertSame('foobar', (string) $cachePool->getArgument(0));
-        $this->assertSame('KO3xHaFEZU', $cachePool->getArgument(1));
+        $this->assertSame('VcRIZlUhEv', $cachePool->getArgument(1));
         $this->assertSame(3, $cachePool->getArgument(2));
     }
 
@@ -80,10 +72,6 @@ class CachePoolPassTest extends \PHPUnit_Framework_TestCase
     public function testThrowsExceptionWhenCachePoolTagHasUnknownAttributes()
     {
         $container = new ContainerBuilder();
-        $container->setParameter('kernel.debug', false);
-        $container->setParameter('kernel.name', 'app');
-        $container->setParameter('kernel.environment', 'prod');
-        $container->setParameter('kernel.root_dir', 'foo');
         $adapter = new Definition();
         $adapter->setAbstract(true);
         $adapter->addTag('cache.pool');

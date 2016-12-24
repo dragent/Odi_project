@@ -12,7 +12,6 @@
 namespace Symfony\Bundle\WebProfilerBundle\Tests\Controller;
 
 use Symfony\Bundle\WebProfilerBundle\Controller\ProfilerController;
-use Symfony\Bundle\WebProfilerBundle\Csp\ContentSecurityPolicyHandler;
 use Symfony\Component\HttpKernel\Profiler\Profile;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -45,16 +44,16 @@ class ProfilerControllerTest extends \PHPUnit_Framework_TestCase
         );
     }
 
-    /**
-     * @dataProvider provideCspVariants
-     */
-    public function testReturns404onTokenNotFound($withCsp)
+    public function testReturns404onTokenNotFound()
     {
+        $urlGenerator = $this->getMock('Symfony\Component\Routing\Generator\UrlGeneratorInterface');
         $twig = $this->getMockBuilder('Twig_Environment')->disableOriginalConstructor()->getMock();
         $profiler = $this
             ->getMockBuilder('Symfony\Component\HttpKernel\Profiler\Profiler')
             ->disableOriginalConstructor()
             ->getMock();
+
+        $controller = new ProfilerController($urlGenerator, $profiler, $twig, array());
 
         $profiler
             ->expects($this->exactly(2))
@@ -66,8 +65,6 @@ class ProfilerControllerTest extends \PHPUnit_Framework_TestCase
             }))
         ;
 
-        $controller = $this->createController($profiler, $twig, $withCsp);
-
         $response = $controller->toolbarAction(Request::create('/_wdt/found'), 'found');
         $this->assertEquals(200, $response->getStatusCode());
 
@@ -75,18 +72,16 @@ class ProfilerControllerTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals(404, $response->getStatusCode());
     }
 
-    /**
-     * @dataProvider provideCspVariants
-     */
-    public function testSearchResult($withCsp)
+    public function testSearchResult()
     {
+        $urlGenerator = $this->getMock('Symfony\Component\Routing\Generator\UrlGeneratorInterface');
         $twig = $this->getMockBuilder('Twig_Environment')->disableOriginalConstructor()->getMock();
         $profiler = $this
             ->getMockBuilder('Symfony\Component\HttpKernel\Profiler\Profiler')
             ->disableOriginalConstructor()
             ->getMock();
 
-        $controller = $this->createController($profiler, $twig, $withCsp);
+        $controller = new ProfilerController($urlGenerator, $profiler, $twig, array());
 
         $tokens = array(
             array(
@@ -114,10 +109,10 @@ class ProfilerControllerTest extends \PHPUnit_Framework_TestCase
             ->will($this->returnValue($tokens));
 
         $request = Request::create('/_profiler/empty/search/results', 'GET', array(
-            'limit' => 2,
-            'ip' => '127.0.0.1',
-            'method' => 'GET',
-            'url' => 'http://example.com/',
+                'limit' => 2,
+                'ip' => '127.0.0.1',
+                'method' => 'GET',
+                'url' => 'http://example.com/',
         ));
 
         $twig->expects($this->once())
@@ -139,26 +134,5 @@ class ProfilerControllerTest extends \PHPUnit_Framework_TestCase
 
         $response = $controller->searchResultsAction($request, 'empty');
         $this->assertEquals(200, $response->getStatusCode());
-    }
-
-    public function provideCspVariants()
-    {
-        return array(
-            array(true),
-            array(false),
-        );
-    }
-
-    private function createController($profiler, $twig, $withCSP)
-    {
-        $urlGenerator = $this->getMock('Symfony\Component\Routing\Generator\UrlGeneratorInterface');
-
-        if ($withCSP) {
-            $nonceGenerator = $this->getMock('Symfony\Bundle\WebProfilerBundle\Csp\NonceGenerator');
-
-            return new ProfilerController($urlGenerator, $profiler, $twig, array(), 'normal', new ContentSecurityPolicyHandler($nonceGenerator));
-        }
-
-        return new ProfilerController($urlGenerator, $profiler, $twig, array(), 'normal');
     }
 }

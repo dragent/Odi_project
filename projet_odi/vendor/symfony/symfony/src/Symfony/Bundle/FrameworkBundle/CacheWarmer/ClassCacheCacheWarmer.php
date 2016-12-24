@@ -21,13 +21,6 @@ use Symfony\Component\HttpKernel\CacheWarmer\CacheWarmerInterface;
  */
 class ClassCacheCacheWarmer implements CacheWarmerInterface
 {
-    private $declaredClasses;
-
-    public function __construct(array $declaredClasses = null)
-    {
-        $this->declaredClasses = $declaredClasses;
-    }
-
     /**
      * Warms up the cache.
      *
@@ -44,9 +37,8 @@ class ClassCacheCacheWarmer implements CacheWarmerInterface
         if (file_exists($cacheDir.'/classes.php')) {
             return;
         }
-        $declared = null !== $this->declaredClasses ? $this->declaredClasses : array_merge(get_declared_classes(), get_declared_interfaces(), get_declared_traits());
 
-        ClassCollectionLoader::inline(include($classmap), $cacheDir.'/classes.php', $declared);
+        ClassCollectionLoader::load(include($classmap), $cacheDir, 'classes', false);
     }
 
     /**

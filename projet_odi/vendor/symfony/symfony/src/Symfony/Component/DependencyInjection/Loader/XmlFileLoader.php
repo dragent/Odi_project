@@ -152,7 +152,7 @@ class XmlFileLoader extends FileLoader
 
         foreach (array('class', 'shared', 'public', 'synthetic', 'lazy', 'abstract') as $key) {
             if ($value = $service->getAttribute($key)) {
-                $method = 'set'.$key;
+                $method = 'set'.str_replace('-', '', $key);
                 $definition->$method(XmlUtils::phpize($value));
             }
         }

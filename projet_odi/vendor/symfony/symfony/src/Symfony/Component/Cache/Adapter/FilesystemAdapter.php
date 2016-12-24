@@ -11,17 +11,43 @@
 
 namespace Symfony\Component\Cache\Adapter;
 
+use Symfony\Component\Cache\Exception\InvalidArgumentException;
+
 /**
  * @author Nicolas Grekas <p@tchwork.com>
  */
 class FilesystemAdapter extends AbstractAdapter
 {
-    use FilesystemAdapterTrait;
+    private $directory;
 
     public function __construct($namespace = '', $defaultLifetime = 0, $directory = null)
     {
         parent::__construct('', $defaultLifetime);
-        $this->init($namespace, $directory);
+
+        if (!isset($directory[0])) {
+            $directory = sys_get_temp_dir().'/symfony-cache';
+        }
+        if (isset($namespace[0])) {
+            if (preg_match('#[^-+_.A-Za-z0-9]#', $namespace, $match)) {
+                throw new InvalidArgumentException(sprintf('FilesystemAdapter namespace contains "%s" but only characters in [-+_.A-Za-z0-9] are allowed.', $match[0]));
+            }
+            $directory .= '/'.$namespace;
+        }
+        if (!file_exists($dir = $directory.'/.')) {
+            @mkdir($directory, 0777, true);
+        }
+        if (false === $dir = realpath($dir)) {
+            throw new InvalidArgumentException(sprintf('Cache directory does not exist (%s)', $directory));
+        }
+        if (!is_writable($dir .= DIRECTORY_SEPARATOR)) {
+            throw new InvalidArgumentException(sprintf('Cache directory is not writable (%s)', $directory));
+        }
+        // On Windows the whole path is limited to 258 chars
+        if ('\\' === DIRECTORY_SEPARATOR && strlen($dir) > 234) {
+            throw new InvalidArgumentException(sprintf('Cache directory too long (%s)', $directory));
+        }
+
+        $this->directory = $dir;
     }
 
     /**
@@ -68,15 +94,65 @@ class FilesystemAdapter extends AbstractAdapter
     /**
      * {@inheritdoc}
      */
+    protected function doClear($namespace)
+    {
+        $ok = true;
+
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($this->directory, \FilesystemIterator::SKIP_DOTS)) as $file) {
+            $ok = ($file->isDir() || @unlink($file) || !file_exists($file)) && $ok;
+        }
+
+        return $ok;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    protected function doDelete(array $ids)
+    {
+        $ok = true;
+
+        foreach ($ids as $id) {
+            $file = $this->getFile($id);
+            $ok = (!file_exists($file) || @unlink($file) || !file_exists($file)) && $ok;
+        }
+
+        return $ok;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     protected function doSave(array $values, $lifetime)
     {
         $ok = true;
         $expiresAt = time() + ($lifetime ?: 31557600); // 31557600s = 1 year
+        $tmp = $this->directory.uniqid('', true);
 
         foreach ($values as $id => $value) {
-            $ok = $this->write($this->getFile($id, true), $expiresAt."\n".rawurlencode($id)."\n".serialize($value), $expiresAt) && $ok;
+            $file = $this->getFile($id, true);
+
+            $value = $expiresAt."\n".rawurlencode($id)."\n".serialize($value);
+            if (false !== @file_put_contents($tmp, $value)) {
+                @touch($tmp, $expiresAt);
+                $ok = @rename($tmp, $file) && $ok;
+            } else {
+                $ok = false;
+            }
         }
 
         return $ok;
+    }
+
+    private function getFile($id, $mkdir = false)
+    {
+        $hash = str_replace('/', '-', base64_encode(md5($id, true)));
+        $dir = $this->directory.$hash[0].DIRECTORY_SEPARATOR.$hash[1].DIRECTORY_SEPARATOR;
+
+        if ($mkdir && !file_exists($dir)) {
+            @mkdir($dir, 0777, true);
+        }
+
+        return $dir.substr($hash, 2, -2);
     }
 }

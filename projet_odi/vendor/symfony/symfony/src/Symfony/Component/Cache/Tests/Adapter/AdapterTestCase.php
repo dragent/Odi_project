@@ -28,6 +28,8 @@ abstract class AdapterTestCase extends CachePoolTest
     {
         if (isset($this->skippedTests[__FUNCTION__])) {
             $this->markTestSkipped($this->skippedTests[__FUNCTION__]);
+
+            return;
         }
 
         $cache = $this->createCachePool(2);
@@ -49,6 +51,8 @@ abstract class AdapterTestCase extends CachePoolTest
     {
         if (isset($this->skippedTests[__FUNCTION__])) {
             $this->markTestSkipped($this->skippedTests[__FUNCTION__]);
+
+            return;
         }
 
         $cache = $this->createCachePool();

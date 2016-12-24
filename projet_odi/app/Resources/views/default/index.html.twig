@@ -1,17 +1,25 @@
 {% extends 'base.html.twig' %}
 
+{% block title %}
+    Bienvenue | ODI
+{% endblock %}
+
 {% block menu %}
-    {% include '/menu.twig' %}
+    {% include 'menubase.twig' %}
 {% endblock %}
 
 {% block header %}
-    HEADER (app/Resources/views/default/index.html.twig)
+	<div class="page-header">
+		<h2 class="centrer isoler">Bienvenue dans le projet ODI</h2>
+	</div>
 {% endblock %}
 
 {% block section %}
-    SECTION (app/Resources/views/default/index.html.twig)
+  <div class="container">
+  </div>
 {% endblock %}
 
-{% block footer %}
-    FOOTER (app/Resources/views/default/index.html.twig)
-{% endblock %}
+
+
+
+

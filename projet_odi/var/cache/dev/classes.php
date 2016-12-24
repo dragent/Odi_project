@@ -1,2816 +1,9 @@
 <?php 
-namespace Symfony\Component\DependencyInjection
-{
-interface ContainerAwareInterface
-{
-public function setContainer(ContainerInterface $container = null);
-}
-}
-namespace Doctrine\Common\Persistence
-{
-interface ConnectionRegistry
-{
-public function getDefaultConnectionName();
-public function getConnection($name = null);
-public function getConnections();
-public function getConnectionNames();
-}
-}
-namespace Doctrine\Common\Persistence
-{
-interface ManagerRegistry extends ConnectionRegistry
-{
-public function getDefaultManagerName();
-public function getManager($name = null);
-public function getManagers();
-public function resetManager($name = null);
-public function getAliasNamespace($alias);
-public function getManagerNames();
-public function getRepository($persistentObject, $persistentManagerName = null);
-public function getManagerForClass($class);
-}
-}
-namespace Symfony\Bridge\Doctrine
-{
-use Doctrine\Common\Persistence\ManagerRegistry as ManagerRegistryInterface;
-use Doctrine\ORM\EntityManager;
-interface RegistryInterface extends ManagerRegistryInterface
-{
-public function getDefaultEntityManagerName();
-public function getEntityManager($name = null);
-public function getEntityManagers();
-public function resetEntityManager($name = null);
-public function getEntityNamespace($alias);
-public function getEntityManagerNames();
-public function getEntityManagerForClass($class);
-}
-}
-namespace Symfony\Component\DependencyInjection
-{
-trait ContainerAwareTrait
-{
-protected $container;
-public function setContainer(ContainerInterface $container = null)
-{
-$this->container = $container;
-}
-}
-}
-namespace Doctrine\Common\Persistence
-{
-abstract class AbstractManagerRegistry implements ManagerRegistry
-{
-private $name;
-private $connections;
-private $managers;
-private $defaultConnection;
-private $defaultManager;
-private $proxyInterfaceName;
-public function __construct($name, array $connections, array $managers, $defaultConnection, $defaultManager, $proxyInterfaceName)
-{
-$this->name = $name;
-$this->connections = $connections;
-$this->managers = $managers;
-$this->defaultConnection = $defaultConnection;
-$this->defaultManager = $defaultManager;
-$this->proxyInterfaceName = $proxyInterfaceName;
-}
-abstract protected function getService($name);
-abstract protected function resetService($name);
-public function getName()
-{
-return $this->name;
-}
-public function getConnection($name = null)
-{
-if (null === $name) {
-$name = $this->defaultConnection;
-}
-if (!isset($this->connections[$name])) {
-throw new \InvalidArgumentException(sprintf('Doctrine %s Connection named "%s" does not exist.', $this->name, $name));
-}
-return $this->getService($this->connections[$name]);
-}
-public function getConnectionNames()
-{
-return $this->connections;
-}
-public function getConnections()
-{
-$connections = [];
-foreach ($this->connections as $name => $id) {
-$connections[$name] = $this->getService($id);
-}
-return $connections;
-}
-public function getDefaultConnectionName()
-{
-return $this->defaultConnection;
-}
-public function getDefaultManagerName()
-{
-return $this->defaultManager;
-}
-public function getManager($name = null)
-{
-if (null === $name) {
-$name = $this->defaultManager;
-}
-if (!isset($this->managers[$name])) {
-throw new \InvalidArgumentException(sprintf('Doctrine %s Manager named "%s" does not exist.', $this->name, $name));
-}
-return $this->getService($this->managers[$name]);
-}
-public function getManagerForClass($class)
-{
-if (strpos($class,':') !== false) {
-list($namespaceAlias, $simpleClassName) = explode(':', $class, 2);
-$class = $this->getAliasNamespace($namespaceAlias) .'\\'. $simpleClassName;
-}
-$proxyClass = new \ReflectionClass($class);
-if ($proxyClass->implementsInterface($this->proxyInterfaceName)) {
-if (! $parentClass = $proxyClass->getParentClass()) {
-return null;
-}
-$class = $parentClass->getName();
-}
-foreach ($this->managers as $id) {
-$manager = $this->getService($id);
-if (!$manager->getMetadataFactory()->isTransient($class)) {
-return $manager;
-}
-}
-}
-public function getManagerNames()
-{
-return $this->managers;
-}
-public function getManagers()
-{
-$dms = [];
-foreach ($this->managers as $name => $id) {
-$dms[$name] = $this->getService($id);
-}
-return $dms;
-}
-public function getRepository($persistentObjectName, $persistentManagerName = null)
-{
-return $this->getManager($persistentManagerName)->getRepository($persistentObjectName);
-}
-public function resetManager($name = null)
-{
-if (null === $name) {
-$name = $this->defaultManager;
-}
-if (!isset($this->managers[$name])) {
-throw new \InvalidArgumentException(sprintf('Doctrine %s Manager named "%s" does not exist.', $this->name, $name));
-}
-$this->resetService($this->managers[$name]);
-}
-}
-}
-namespace Symfony\Bridge\Doctrine
-{
-use ProxyManager\Proxy\LazyLoadingInterface;
-use Symfony\Component\DependencyInjection\Container;
-use Symfony\Component\DependencyInjection\ContainerAwareInterface;
-use Symfony\Component\DependencyInjection\ContainerAwareTrait;
-use Doctrine\Common\Persistence\AbstractManagerRegistry;
-abstract class ManagerRegistry extends AbstractManagerRegistry implements ContainerAwareInterface
-{
-use ContainerAwareTrait;
-protected function getService($name)
-{
-return $this->container->get($name);
-}
-protected function resetService($name)
-{
-if (!$this->container->initialized($name)) {
-return;
-}
-$manager = $this->container->get($name);
-if (!$manager instanceof LazyLoadingInterface) {
-@trigger_error(sprintf('Resetting a non-lazy manager service is deprecated since Symfony 3.2 and will throw an exception in version 4.0. Set the "%s" service as lazy and require "symfony/proxy-manager-bridge" in your composer.json file instead.', $name));
-$this->container->set($name, null);
-return;
-}
-$manager->setProxyInitializer(\Closure::bind(
-function (&$wrappedInstance, LazyLoadingInterface $manager) use ($name) {
-if (isset($this->aliases[$name = strtolower($name)])) {
-$name = $this->aliases[$name];
-}
-$method = !isset($this->methodMap[$name]) ?'get'.strtr($name, $this->underscoreMap).'Service': $this->methodMap[$name];
-$wrappedInstance = $this->{$method}(false);
-$manager->setProxyInitializer(null);
-return true;
-},
-$this->container,
-Container::class
-));
-}
-}
-}
-namespace Doctrine\Bundle\DoctrineBundle
-{
-use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Bridge\Doctrine\RegistryInterface;
-use Symfony\Bridge\Doctrine\ManagerRegistry;
-use Doctrine\ORM\ORMException;
-use Doctrine\ORM\EntityManager;
-class Registry extends ManagerRegistry implements RegistryInterface
-{
-public function __construct(ContainerInterface $container, array $connections, array $entityManagers, $defaultConnection, $defaultEntityManager)
-{
-$this->setContainer($container);
-parent::__construct('ORM', $connections, $entityManagers, $defaultConnection, $defaultEntityManager,'Doctrine\ORM\Proxy\Proxy');
-}
-public function getDefaultEntityManagerName()
-{
-trigger_error('getDefaultEntityManagerName is deprecated since Symfony 2.1. Use getDefaultManagerName instead', E_USER_DEPRECATED);
-return $this->getDefaultManagerName();
-}
-public function getEntityManager($name = null)
-{
-trigger_error('getEntityManager is deprecated since Symfony 2.1. Use getManager instead', E_USER_DEPRECATED);
-return $this->getManager($name);
-}
-public function getEntityManagers()
-{
-trigger_error('getEntityManagers is deprecated since Symfony 2.1. Use getManagers instead', E_USER_DEPRECATED);
-return $this->getManagers();
-}
-public function resetEntityManager($name = null)
-{
-trigger_error('resetEntityManager is deprecated since Symfony 2.1. Use resetManager instead', E_USER_DEPRECATED);
-$this->resetManager($name);
-}
-public function getEntityNamespace($alias)
-{
-trigger_error('getEntityNamespace is deprecated since Symfony 2.1. Use getAliasNamespace instead', E_USER_DEPRECATED);
-return $this->getAliasNamespace($alias);
-}
-public function getAliasNamespace($alias)
-{
-foreach (array_keys($this->getManagers()) as $name) {
-try {
-return $this->getManager($name)->getConfiguration()->getEntityNamespace($alias);
-} catch (ORMException $e) {
-}
-}
-throw ORMException::unknownEntityNamespace($alias);
-}
-public function getEntityManagerNames()
-{
-trigger_error('getEntityManagerNames is deprecated since Symfony 2.1. Use getManagerNames instead', E_USER_DEPRECATED);
-return $this->getManagerNames();
-}
-public function getEntityManagerForClass($class)
-{
-trigger_error('getEntityManagerForClass is deprecated since Symfony 2.1. Use getManagerForClass instead', E_USER_DEPRECATED);
-return $this->getManagerForClass($class);
-}
-}
-}
-namespace Doctrine\Common\Lexer
-{
-abstract class AbstractLexer
-{
-private $input;
-private $tokens = array();
-private $position = 0;
-private $peek = 0;
-public $lookahead;
-public $token;
-public function setInput($input)
-{
-$this->input = $input;
-$this->tokens = array();
-$this->reset();
-$this->scan($input);
-}
-public function reset()
-{
-$this->lookahead = null;
-$this->token = null;
-$this->peek = 0;
-$this->position = 0;
-}
-public function resetPeek()
-{
-$this->peek = 0;
-}
-public function resetPosition($position = 0)
-{
-$this->position = $position;
-}
-public function getInputUntilPosition($position)
-{
-return substr($this->input, 0, $position);
-}
-public function isNextToken($token)
-{
-return null !== $this->lookahead && $this->lookahead['type'] === $token;
-}
-public function isNextTokenAny(array $tokens)
-{
-return null !== $this->lookahead && in_array($this->lookahead['type'], $tokens, true);
-}
-public function moveNext()
-{
-$this->peek = 0;
-$this->token = $this->lookahead;
-$this->lookahead = (isset($this->tokens[$this->position]))
-? $this->tokens[$this->position++] : null;
-return $this->lookahead !== null;
-}
-public function skipUntil($type)
-{
-while ($this->lookahead !== null && $this->lookahead['type'] !== $type) {
-$this->moveNext();
-}
-}
-public function isA($value, $token)
-{
-return $this->getType($value) === $token;
-}
-public function peek()
-{
-if (isset($this->tokens[$this->position + $this->peek])) {
-return $this->tokens[$this->position + $this->peek++];
-} else {
-return null;
-}
-}
-public function glimpse()
-{
-$peek = $this->peek();
-$this->peek = 0;
-return $peek;
-}
-protected function scan($input)
-{
-static $regex;
-if ( ! isset($regex)) {
-$regex = sprintf('/(%s)|%s/%s',
-implode(')|(', $this->getCatchablePatterns()),
-implode('|', $this->getNonCatchablePatterns()),
-$this->getModifiers()
-);
-}
-$flags = PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_OFFSET_CAPTURE;
-$matches = preg_split($regex, $input, -1, $flags);
-foreach ($matches as $match) {
-$type = $this->getType($match[0]);
-$this->tokens[] = array('value'=> $match[0],'type'=> $type,'position'=> $match[1],
-);
-}
-}
-public function getLiteral($token)
-{
-$className = get_class($this);
-$reflClass = new \ReflectionClass($className);
-$constants = $reflClass->getConstants();
-foreach ($constants as $name => $value) {
-if ($value === $token) {
-return $className .'::'. $name;
-}
-}
-return $token;
-}
-protected function getModifiers()
-{
-return'i';
-}
-abstract protected function getCatchablePatterns();
-abstract protected function getNonCatchablePatterns();
-abstract protected function getType(&$value);
-}
-}
-namespace Doctrine\Common\Annotations
-{
-use Doctrine\Common\Lexer\AbstractLexer;
-final class DocLexer extends AbstractLexer
-{
-const T_NONE = 1;
-const T_INTEGER = 2;
-const T_STRING = 3;
-const T_FLOAT = 4;
-const T_IDENTIFIER = 100;
-const T_AT = 101;
-const T_CLOSE_CURLY_BRACES = 102;
-const T_CLOSE_PARENTHESIS = 103;
-const T_COMMA = 104;
-const T_EQUALS = 105;
-const T_FALSE = 106;
-const T_NAMESPACE_SEPARATOR = 107;
-const T_OPEN_CURLY_BRACES = 108;
-const T_OPEN_PARENTHESIS = 109;
-const T_TRUE = 110;
-const T_NULL = 111;
-const T_COLON = 112;
-protected $noCase = array('@'=> self::T_AT,','=> self::T_COMMA,'('=> self::T_OPEN_PARENTHESIS,')'=> self::T_CLOSE_PARENTHESIS,'{'=> self::T_OPEN_CURLY_BRACES,'}'=> self::T_CLOSE_CURLY_BRACES,'='=> self::T_EQUALS,':'=> self::T_COLON,'\\'=> self::T_NAMESPACE_SEPARATOR
-);
-protected $withCase = array('true'=> self::T_TRUE,'false'=> self::T_FALSE,'null'=> self::T_NULL
-);
-protected function getCatchablePatterns()
-{
-return array('[a-z_\\\][a-z0-9_\:\\\]*[a-z_][a-z0-9_]*','(?:[+-]?[0-9]+(?:[\.][0-9]+)*)(?:[eE][+-]?[0-9]+)?','"(?:""|[^"])*+"',
-);
-}
-protected function getNonCatchablePatterns()
-{
-return array('\s+','\*+','(.)');
-}
-protected function getType(&$value)
-{
-$type = self::T_NONE;
-if ($value[0] ==='"') {
-$value = str_replace('""','"', substr($value, 1, strlen($value) - 2));
-return self::T_STRING;
-}
-if (isset($this->noCase[$value])) {
-return $this->noCase[$value];
-}
-if ($value[0] ==='_'|| $value[0] ==='\\'|| ctype_alpha($value[0])) {
-return self::T_IDENTIFIER;
-}
-$lowerValue = strtolower($value);
-if (isset($this->withCase[$lowerValue])) {
-return $this->withCase[$lowerValue];
-}
-if (is_numeric($value)) {
-return (strpos($value,'.') !== false || stripos($value,'e') !== false)
-? self::T_FLOAT : self::T_INTEGER;
-}
-return $type;
-}
-}
-}
-namespace Doctrine\Common\Annotations
-{
-interface Reader
-{
-function getClassAnnotations(\ReflectionClass $class);
-function getClassAnnotation(\ReflectionClass $class, $annotationName);
-function getMethodAnnotations(\ReflectionMethod $method);
-function getMethodAnnotation(\ReflectionMethod $method, $annotationName);
-function getPropertyAnnotations(\ReflectionProperty $property);
-function getPropertyAnnotation(\ReflectionProperty $property, $annotationName);
-}
-}
-namespace Doctrine\Common\Annotations
-{
-class FileCacheReader implements Reader
-{
-private $reader;
-private $dir;
-private $debug;
-private $loadedAnnotations = array();
-private $classNameHashes = array();
-private $umask;
-public function __construct(Reader $reader, $cacheDir, $debug = false, $umask = 0002)
-{
-if ( ! is_int($umask)) {
-throw new \InvalidArgumentException(sprintf('The parameter umask must be an integer, was: %s',
-gettype($umask)
-));
-}
-$this->reader = $reader;
-$this->umask = $umask;
-if (!is_dir($cacheDir) && !@mkdir($cacheDir, 0777 & (~$this->umask), true)) {
-throw new \InvalidArgumentException(sprintf('The directory "%s" does not exist and could not be created.', $cacheDir));
-}
-$this->dir = rtrim($cacheDir,'\\/');
-$this->debug = $debug;
-}
-public function getClassAnnotations(\ReflectionClass $class)
-{
-if ( ! isset($this->classNameHashes[$class->name])) {
-$this->classNameHashes[$class->name] = sha1($class->name);
-}
-$key = $this->classNameHashes[$class->name];
-if (isset($this->loadedAnnotations[$key])) {
-return $this->loadedAnnotations[$key];
-}
-$path = $this->dir.'/'.strtr($key,'\\','-').'.cache.php';
-if (!is_file($path)) {
-$annot = $this->reader->getClassAnnotations($class);
-$this->saveCacheFile($path, $annot);
-return $this->loadedAnnotations[$key] = $annot;
-}
-if ($this->debug
-&& (false !== $filename = $class->getFilename())
-&& filemtime($path) < filemtime($filename)) {
-@unlink($path);
-$annot = $this->reader->getClassAnnotations($class);
-$this->saveCacheFile($path, $annot);
-return $this->loadedAnnotations[$key] = $annot;
-}
-return $this->loadedAnnotations[$key] = include $path;
-}
-public function getPropertyAnnotations(\ReflectionProperty $property)
-{
-$class = $property->getDeclaringClass();
-if ( ! isset($this->classNameHashes[$class->name])) {
-$this->classNameHashes[$class->name] = sha1($class->name);
-}
-$key = $this->classNameHashes[$class->name].'$'.$property->getName();
-if (isset($this->loadedAnnotations[$key])) {
-return $this->loadedAnnotations[$key];
-}
-$path = $this->dir.'/'.strtr($key,'\\','-').'.cache.php';
-if (!is_file($path)) {
-$annot = $this->reader->getPropertyAnnotations($property);
-$this->saveCacheFile($path, $annot);
-return $this->loadedAnnotations[$key] = $annot;
-}
-if ($this->debug
-&& (false !== $filename = $class->getFilename())
-&& filemtime($path) < filemtime($filename)) {
-@unlink($path);
-$annot = $this->reader->getPropertyAnnotations($property);
-$this->saveCacheFile($path, $annot);
-return $this->loadedAnnotations[$key] = $annot;
-}
-return $this->loadedAnnotations[$key] = include $path;
-}
-public function getMethodAnnotations(\ReflectionMethod $method)
-{
-$class = $method->getDeclaringClass();
-if ( ! isset($this->classNameHashes[$class->name])) {
-$this->classNameHashes[$class->name] = sha1($class->name);
-}
-$key = $this->classNameHashes[$class->name].'#'.$method->getName();
-if (isset($this->loadedAnnotations[$key])) {
-return $this->loadedAnnotations[$key];
-}
-$path = $this->dir.'/'.strtr($key,'\\','-').'.cache.php';
-if (!is_file($path)) {
-$annot = $this->reader->getMethodAnnotations($method);
-$this->saveCacheFile($path, $annot);
-return $this->loadedAnnotations[$key] = $annot;
-}
-if ($this->debug
-&& (false !== $filename = $class->getFilename())
-&& filemtime($path) < filemtime($filename)) {
-@unlink($path);
-$annot = $this->reader->getMethodAnnotations($method);
-$this->saveCacheFile($path, $annot);
-return $this->loadedAnnotations[$key] = $annot;
-}
-return $this->loadedAnnotations[$key] = include $path;
-}
-private function saveCacheFile($path, $data)
-{
-if (!is_writable($this->dir)) {
-throw new \InvalidArgumentException(sprintf('The directory "%s" is not writable. Both, the webserver and the console user need access. You can manage access rights for multiple users with "chmod +a". If your system does not support this, check out the acl package.', $this->dir));
-}
-$tempfile = tempnam($this->dir, uniqid('', true));
-if (false === $tempfile) {
-throw new \RuntimeException(sprintf('Unable to create tempfile in directory: %s', $this->dir));
-}
-$written = file_put_contents($tempfile,'<?php return unserialize('.var_export(serialize($data), true).');');
-if (false === $written) {
-throw new \RuntimeException(sprintf('Unable to write cached file to: %s', $tempfile));
-}
-@chmod($tempfile, 0666 & (~$this->umask));
-if (false === rename($tempfile, $path)) {
-@unlink($tempfile);
-throw new \RuntimeException(sprintf('Unable to rename %s to %s', $tempfile, $path));
-}
-}
-public function getClassAnnotation(\ReflectionClass $class, $annotationName)
-{
-$annotations = $this->getClassAnnotations($class);
-foreach ($annotations as $annotation) {
-if ($annotation instanceof $annotationName) {
-return $annotation;
-}
-}
-return null;
-}
-public function getMethodAnnotation(\ReflectionMethod $method, $annotationName)
-{
-$annotations = $this->getMethodAnnotations($method);
-foreach ($annotations as $annotation) {
-if ($annotation instanceof $annotationName) {
-return $annotation;
-}
-}
-return null;
-}
-public function getPropertyAnnotation(\ReflectionProperty $property, $annotationName)
-{
-$annotations = $this->getPropertyAnnotations($property);
-foreach ($annotations as $annotation) {
-if ($annotation instanceof $annotationName) {
-return $annotation;
-}
-}
-return null;
-}
-public function clearLoadedAnnotations()
-{
-$this->loadedAnnotations = array();
-}
-}
-}
-namespace Doctrine\Common\Annotations
-{
-use SplFileObject;
-final class PhpParser
-{
-public function parseClass(\ReflectionClass $class)
-{
-if (method_exists($class,'getUseStatements')) {
-return $class->getUseStatements();
-}
-if (false === $filename = $class->getFilename()) {
-return array();
-}
-$content = $this->getFileContent($filename, $class->getStartLine());
-if (null === $content) {
-return array();
-}
-$namespace = preg_quote($class->getNamespaceName());
-$content = preg_replace('/^.*?(\bnamespace\s+'. $namespace .'\s*[;{].*)$/s','\\1', $content);
-$tokenizer = new TokenParser('<?php '. $content);
-$statements = $tokenizer->parseUseStatements($class->getNamespaceName());
-return $statements;
-}
-private function getFileContent($filename, $lineNumber)
-{
-if ( ! is_file($filename)) {
-return null;
-}
-$content ='';
-$lineCnt = 0;
-$file = new SplFileObject($filename);
-while (!$file->eof()) {
-if ($lineCnt++ == $lineNumber) {
-break;
-}
-$content .= $file->fgets();
-}
-return $content;
-}
-}
-}
-namespace Doctrine\Common
-{
-use Doctrine\Common\Lexer\AbstractLexer;
-abstract class Lexer extends AbstractLexer
-{
-}
-}
-namespace Doctrine\Common\Persistence
-{
-interface Proxy
-{
-const MARKER ='__CG__';
-const MARKER_LENGTH = 6;
-public function __load();
-public function __isInitialized();
-}
-}
-namespace Doctrine\Common\Util
-{
-use Doctrine\Common\Persistence\Proxy;
-class ClassUtils
-{
-public static function getRealClass($class)
-{
-if (false === $pos = strrpos($class,'\\'.Proxy::MARKER.'\\')) {
-return $class;
-}
-return substr($class, $pos + Proxy::MARKER_LENGTH + 2);
-}
-public static function getClass($object)
-{
-return self::getRealClass(get_class($object));
-}
-public static function getParentClass($className)
-{
-return get_parent_class( self::getRealClass( $className ) );
-}
-public static function newReflectionClass($class)
-{
-return new \ReflectionClass( self::getRealClass( $class ) );
-}
-public static function newReflectionObject($object)
-{
-return self::newReflectionClass( self::getClass( $object ) );
-}
-public static function generateProxyClassName($className, $proxyNamespace)
-{
-return rtrim($proxyNamespace,'\\') .'\\'.Proxy::MARKER.'\\'. ltrim($className,'\\');
-}
-}
-}
-namespace Monolog\Formatter
-{
-interface FormatterInterface
-{
-public function format(array $record);
-public function formatBatch(array $records);
-}
-}
-namespace Monolog\Formatter
-{
-use Exception;
-class NormalizerFormatter implements FormatterInterface
-{
-const SIMPLE_DATE ="Y-m-d H:i:s";
-protected $dateFormat;
-public function __construct($dateFormat = null)
-{
-$this->dateFormat = $dateFormat ?: static::SIMPLE_DATE;
-if (!function_exists('json_encode')) {
-throw new \RuntimeException('PHP\'s json extension is required to use Monolog\'s NormalizerFormatter');
-}
-}
-public function format(array $record)
-{
-return $this->normalize($record);
-}
-public function formatBatch(array $records)
-{
-foreach ($records as $key => $record) {
-$records[$key] = $this->format($record);
-}
-return $records;
-}
-protected function normalize($data)
-{
-if (null === $data || is_scalar($data)) {
-if (is_float($data)) {
-if (is_infinite($data)) {
-return ($data > 0 ?'':'-') .'INF';
-}
-if (is_nan($data)) {
-return'NaN';
-}
-}
-return $data;
-}
-if (is_array($data)) {
-$normalized = array();
-$count = 1;
-foreach ($data as $key => $value) {
-if ($count++ >= 1000) {
-$normalized['...'] ='Over 1000 items ('.count($data).' total), aborting normalization';
-break;
-}
-$normalized[$key] = $this->normalize($value);
-}
-return $normalized;
-}
-if ($data instanceof \DateTime) {
-return $data->format($this->dateFormat);
-}
-if (is_object($data)) {
-if ($data instanceof Exception || (PHP_VERSION_ID > 70000 && $data instanceof \Throwable)) {
-return $this->normalizeException($data);
-}
-if (method_exists($data,'__toString') && !$data instanceof \JsonSerializable) {
-$value = $data->__toString();
-} else {
-$value = $this->toJson($data, true);
-}
-return sprintf("[object] (%s: %s)", get_class($data), $value);
-}
-if (is_resource($data)) {
-return sprintf('[resource] (%s)', get_resource_type($data));
-}
-return'[unknown('.gettype($data).')]';
-}
-protected function normalizeException($e)
-{
-if (!$e instanceof Exception && !$e instanceof \Throwable) {
-throw new \InvalidArgumentException('Exception/Throwable expected, got '.gettype($e).' / '.get_class($e));
-}
-$data = array('class'=> get_class($e),'message'=> $e->getMessage(),'code'=> $e->getCode(),'file'=> $e->getFile().':'.$e->getLine(),
-);
-if ($e instanceof \SoapFault) {
-if (isset($e->faultcode)) {
-$data['faultcode'] = $e->faultcode;
-}
-if (isset($e->faultactor)) {
-$data['faultactor'] = $e->faultactor;
-}
-if (isset($e->detail)) {
-$data['detail'] = $e->detail;
-}
-}
-$trace = $e->getTrace();
-foreach ($trace as $frame) {
-if (isset($frame['file'])) {
-$data['trace'][] = $frame['file'].':'.$frame['line'];
-} elseif (isset($frame['function']) && $frame['function'] ==='{closure}') {
-$data['trace'][] = $frame['function'];
-} else {
-$data['trace'][] = $this->toJson($this->normalize($frame), true);
-}
-}
-if ($previous = $e->getPrevious()) {
-$data['previous'] = $this->normalizeException($previous);
-}
-return $data;
-}
-protected function toJson($data, $ignoreErrors = false)
-{
-if ($ignoreErrors) {
-return @$this->jsonEncode($data);
-}
-$json = $this->jsonEncode($data);
-if ($json === false) {
-$json = $this->handleJsonError(json_last_error(), $data);
-}
-return $json;
-}
-private function jsonEncode($data)
-{
-if (version_compare(PHP_VERSION,'5.4.0','>=')) {
-return json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-}
-return json_encode($data);
-}
-private function handleJsonError($code, $data)
-{
-if ($code !== JSON_ERROR_UTF8) {
-$this->throwEncodeError($code, $data);
-}
-if (is_string($data)) {
-$this->detectAndCleanUtf8($data);
-} elseif (is_array($data)) {
-array_walk_recursive($data, array($this,'detectAndCleanUtf8'));
-} else {
-$this->throwEncodeError($code, $data);
-}
-$json = $this->jsonEncode($data);
-if ($json === false) {
-$this->throwEncodeError(json_last_error(), $data);
-}
-return $json;
-}
-private function throwEncodeError($code, $data)
-{
-switch ($code) {
-case JSON_ERROR_DEPTH:
-$msg ='Maximum stack depth exceeded';
-break;
-case JSON_ERROR_STATE_MISMATCH:
-$msg ='Underflow or the modes mismatch';
-break;
-case JSON_ERROR_CTRL_CHAR:
-$msg ='Unexpected control character found';
-break;
-case JSON_ERROR_UTF8:
-$msg ='Malformed UTF-8 characters, possibly incorrectly encoded';
-break;
-default:
-$msg ='Unknown error';
-}
-throw new \RuntimeException('JSON encoding failed: '.$msg.'. Encoding: '.var_export($data, true));
-}
-public function detectAndCleanUtf8(&$data)
-{
-if (is_string($data) && !preg_match('//u', $data)) {
-$data = preg_replace_callback('/[\x80-\xFF]+/',
-function ($m) { return utf8_encode($m[0]); },
-$data
-);
-$data = str_replace(
-array('¤','¦','¨','´','¸','¼','½','¾'),
-array('€','Š','š','Ž','ž','Œ','œ','Ÿ'),
-$data
-);
-}
-}
-}
-}
-namespace Monolog\Formatter
-{
-class LineFormatter extends NormalizerFormatter
-{
-const SIMPLE_FORMAT ="[%datetime%] %channel%.%level_name%: %message% %context% %extra%\n";
-protected $format;
-protected $allowInlineLineBreaks;
-protected $ignoreEmptyContextAndExtra;
-protected $includeStacktraces;
-public function __construct($format = null, $dateFormat = null, $allowInlineLineBreaks = false, $ignoreEmptyContextAndExtra = false)
-{
-$this->format = $format ?: static::SIMPLE_FORMAT;
-$this->allowInlineLineBreaks = $allowInlineLineBreaks;
-$this->ignoreEmptyContextAndExtra = $ignoreEmptyContextAndExtra;
-parent::__construct($dateFormat);
-}
-public function includeStacktraces($include = true)
-{
-$this->includeStacktraces = $include;
-if ($this->includeStacktraces) {
-$this->allowInlineLineBreaks = true;
-}
-}
-public function allowInlineLineBreaks($allow = true)
-{
-$this->allowInlineLineBreaks = $allow;
-}
-public function ignoreEmptyContextAndExtra($ignore = true)
-{
-$this->ignoreEmptyContextAndExtra = $ignore;
-}
-public function format(array $record)
-{
-$vars = parent::format($record);
-$output = $this->format;
-foreach ($vars['extra'] as $var => $val) {
-if (false !== strpos($output,'%extra.'.$var.'%')) {
-$output = str_replace('%extra.'.$var.'%', $this->stringify($val), $output);
-unset($vars['extra'][$var]);
-}
-}
-foreach ($vars['context'] as $var => $val) {
-if (false !== strpos($output,'%context.'.$var.'%')) {
-$output = str_replace('%context.'.$var.'%', $this->stringify($val), $output);
-unset($vars['context'][$var]);
-}
-}
-if ($this->ignoreEmptyContextAndExtra) {
-if (empty($vars['context'])) {
-unset($vars['context']);
-$output = str_replace('%context%','', $output);
-}
-if (empty($vars['extra'])) {
-unset($vars['extra']);
-$output = str_replace('%extra%','', $output);
-}
-}
-foreach ($vars as $var => $val) {
-if (false !== strpos($output,'%'.$var.'%')) {
-$output = str_replace('%'.$var.'%', $this->stringify($val), $output);
-}
-}
-if (false !== strpos($output,'%')) {
-$output = preg_replace('/%(?:extra|context)\..+?%/','', $output);
-}
-return $output;
-}
-public function formatBatch(array $records)
-{
-$message ='';
-foreach ($records as $record) {
-$message .= $this->format($record);
-}
-return $message;
-}
-public function stringify($value)
-{
-return $this->replaceNewlines($this->convertToString($value));
-}
-protected function normalizeException($e)
-{
-if (!$e instanceof \Exception && !$e instanceof \Throwable) {
-throw new \InvalidArgumentException('Exception/Throwable expected, got '.gettype($e).' / '.get_class($e));
-}
-$previousText ='';
-if ($previous = $e->getPrevious()) {
-do {
-$previousText .=', '.get_class($previous).'(code: '.$previous->getCode().'): '.$previous->getMessage().' at '.$previous->getFile().':'.$previous->getLine();
-} while ($previous = $previous->getPrevious());
-}
-$str ='[object] ('.get_class($e).'(code: '.$e->getCode().'): '.$e->getMessage().' at '.$e->getFile().':'.$e->getLine().$previousText.')';
-if ($this->includeStacktraces) {
-$str .="\n[stacktrace]\n".$e->getTraceAsString();
-}
-return $str;
-}
-protected function convertToString($data)
-{
-if (null === $data || is_bool($data)) {
-return var_export($data, true);
-}
-if (is_scalar($data)) {
-return (string) $data;
-}
-if (version_compare(PHP_VERSION,'5.4.0','>=')) {
-return $this->toJson($data, true);
-}
-return str_replace('\\/','/', @json_encode($data));
-}
-protected function replaceNewlines($str)
-{
-if ($this->allowInlineLineBreaks) {
-return $str;
-}
-return str_replace(array("\r\n","\r","\n"),' ', $str);
-}
-}
-}
-namespace Monolog\Handler
-{
-use Monolog\Formatter\FormatterInterface;
-interface HandlerInterface
-{
-public function isHandling(array $record);
-public function handle(array $record);
-public function handleBatch(array $records);
-public function pushProcessor($callback);
-public function popProcessor();
-public function setFormatter(FormatterInterface $formatter);
-public function getFormatter();
-}
-}
-namespace Monolog\Handler
-{
-use Monolog\Logger;
-use Monolog\Formatter\FormatterInterface;
-use Monolog\Formatter\LineFormatter;
-abstract class AbstractHandler implements HandlerInterface
-{
-protected $level = Logger::DEBUG;
-protected $bubble = true;
-protected $formatter;
-protected $processors = array();
-public function __construct($level = Logger::DEBUG, $bubble = true)
-{
-$this->setLevel($level);
-$this->bubble = $bubble;
-}
-public function isHandling(array $record)
-{
-return $record['level'] >= $this->level;
-}
-public function handleBatch(array $records)
-{
-foreach ($records as $record) {
-$this->handle($record);
-}
-}
-public function close()
-{
-}
-public function pushProcessor($callback)
-{
-if (!is_callable($callback)) {
-throw new \InvalidArgumentException('Processors must be valid callables (callback or object with an __invoke method), '.var_export($callback, true).' given');
-}
-array_unshift($this->processors, $callback);
-return $this;
-}
-public function popProcessor()
-{
-if (!$this->processors) {
-throw new \LogicException('You tried to pop from an empty processor stack.');
-}
-return array_shift($this->processors);
-}
-public function setFormatter(FormatterInterface $formatter)
-{
-$this->formatter = $formatter;
-return $this;
-}
-public function getFormatter()
-{
-if (!$this->formatter) {
-$this->formatter = $this->getDefaultFormatter();
-}
-return $this->formatter;
-}
-public function setLevel($level)
-{
-$this->level = Logger::toMonologLevel($level);
-return $this;
-}
-public function getLevel()
-{
-return $this->level;
-}
-public function setBubble($bubble)
-{
-$this->bubble = $bubble;
-return $this;
-}
-public function getBubble()
-{
-return $this->bubble;
-}
-public function __destruct()
-{
-try {
-$this->close();
-} catch (\Exception $e) {
-} catch (\Throwable $e) {
-}
-}
-protected function getDefaultFormatter()
-{
-return new LineFormatter();
-}
-}
-}
-namespace Monolog\Handler
-{
-abstract class AbstractProcessingHandler extends AbstractHandler
-{
-public function handle(array $record)
-{
-if (!$this->isHandling($record)) {
-return false;
-}
-$record = $this->processRecord($record);
-$record['formatted'] = $this->getFormatter()->format($record);
-$this->write($record);
-return false === $this->bubble;
-}
-abstract protected function write(array $record);
-protected function processRecord(array $record)
-{
-if ($this->processors) {
-foreach ($this->processors as $processor) {
-$record = call_user_func($processor, $record);
-}
-}
-return $record;
-}
-}
-}
-namespace Monolog\Handler
-{
-use Monolog\Logger;
-class FilterHandler extends AbstractHandler
-{
-protected $handler;
-protected $acceptedLevels;
-protected $bubble;
-public function __construct($handler, $minLevelOrList = Logger::DEBUG, $maxLevel = Logger::EMERGENCY, $bubble = true)
-{
-$this->handler = $handler;
-$this->bubble = $bubble;
-$this->setAcceptedLevels($minLevelOrList, $maxLevel);
-if (!$this->handler instanceof HandlerInterface && !is_callable($this->handler)) {
-throw new \RuntimeException("The given handler (".json_encode($this->handler).") is not a callable nor a Monolog\Handler\HandlerInterface object");
-}
-}
-public function getAcceptedLevels()
-{
-return array_flip($this->acceptedLevels);
-}
-public function setAcceptedLevels($minLevelOrList = Logger::DEBUG, $maxLevel = Logger::EMERGENCY)
-{
-if (is_array($minLevelOrList)) {
-$acceptedLevels = array_map('Monolog\Logger::toMonologLevel', $minLevelOrList);
-} else {
-$minLevelOrList = Logger::toMonologLevel($minLevelOrList);
-$maxLevel = Logger::toMonologLevel($maxLevel);
-$acceptedLevels = array_values(array_filter(Logger::getLevels(), function ($level) use ($minLevelOrList, $maxLevel) {
-return $level >= $minLevelOrList && $level <= $maxLevel;
-}));
-}
-$this->acceptedLevels = array_flip($acceptedLevels);
-}
-public function isHandling(array $record)
-{
-return isset($this->acceptedLevels[$record['level']]);
-}
-public function handle(array $record)
-{
-if (!$this->isHandling($record)) {
-return false;
-}
-if (!$this->handler instanceof HandlerInterface) {
-$this->handler = call_user_func($this->handler, $record, $this);
-if (!$this->handler instanceof HandlerInterface) {
-throw new \RuntimeException("The factory callable should return a HandlerInterface");
-}
-}
-if ($this->processors) {
-foreach ($this->processors as $processor) {
-$record = call_user_func($processor, $record);
-}
-}
-$this->handler->handle($record);
-return false === $this->bubble;
-}
-public function handleBatch(array $records)
-{
-$filtered = array();
-foreach ($records as $record) {
-if ($this->isHandling($record)) {
-$filtered[] = $record;
-}
-}
-$this->handler->handleBatch($filtered);
-}
-}
-}
-namespace Monolog\Handler
-{
-use Monolog\Handler\FingersCrossed\ErrorLevelActivationStrategy;
-use Monolog\Handler\FingersCrossed\ActivationStrategyInterface;
-use Monolog\Logger;
-class FingersCrossedHandler extends AbstractHandler
-{
-protected $handler;
-protected $activationStrategy;
-protected $buffering = true;
-protected $bufferSize;
-protected $buffer = array();
-protected $stopBuffering;
-protected $passthruLevel;
-public function __construct($handler, $activationStrategy = null, $bufferSize = 0, $bubble = true, $stopBuffering = true, $passthruLevel = null)
-{
-if (null === $activationStrategy) {
-$activationStrategy = new ErrorLevelActivationStrategy(Logger::WARNING);
-}
-if (!$activationStrategy instanceof ActivationStrategyInterface) {
-$activationStrategy = new ErrorLevelActivationStrategy($activationStrategy);
-}
-$this->handler = $handler;
-$this->activationStrategy = $activationStrategy;
-$this->bufferSize = $bufferSize;
-$this->bubble = $bubble;
-$this->stopBuffering = $stopBuffering;
-if ($passthruLevel !== null) {
-$this->passthruLevel = Logger::toMonologLevel($passthruLevel);
-}
-if (!$this->handler instanceof HandlerInterface && !is_callable($this->handler)) {
-throw new \RuntimeException("The given handler (".json_encode($this->handler).") is not a callable nor a Monolog\Handler\HandlerInterface object");
-}
-}
-public function isHandling(array $record)
-{
-return true;
-}
-public function activate()
-{
-if ($this->stopBuffering) {
-$this->buffering = false;
-}
-if (!$this->handler instanceof HandlerInterface) {
-$record = end($this->buffer) ?: null;
-$this->handler = call_user_func($this->handler, $record, $this);
-if (!$this->handler instanceof HandlerInterface) {
-throw new \RuntimeException("The factory callable should return a HandlerInterface");
-}
-}
-$this->handler->handleBatch($this->buffer);
-$this->buffer = array();
-}
-public function handle(array $record)
-{
-if ($this->processors) {
-foreach ($this->processors as $processor) {
-$record = call_user_func($processor, $record);
-}
-}
-if ($this->buffering) {
-$this->buffer[] = $record;
-if ($this->bufferSize > 0 && count($this->buffer) > $this->bufferSize) {
-array_shift($this->buffer);
-}
-if ($this->activationStrategy->isHandlerActivated($record)) {
-$this->activate();
-}
-} else {
-$this->handler->handle($record);
-}
-return false === $this->bubble;
-}
-public function close()
-{
-if (null !== $this->passthruLevel) {
-$level = $this->passthruLevel;
-$this->buffer = array_filter($this->buffer, function ($record) use ($level) {
-return $record['level'] >= $level;
-});
-if (count($this->buffer) > 0) {
-$this->handler->handleBatch($this->buffer);
-$this->buffer = array();
-}
-}
-}
-public function reset()
-{
-$this->buffering = true;
-}
-public function clear()
-{
-$this->buffer = array();
-$this->reset();
-}
-}
-}
-namespace Monolog\Handler\FingersCrossed
-{
-interface ActivationStrategyInterface
-{
-public function isHandlerActivated(array $record);
-}
-}
-namespace Monolog\Handler\FingersCrossed
-{
-use Monolog\Logger;
-class ErrorLevelActivationStrategy implements ActivationStrategyInterface
-{
-private $actionLevel;
-public function __construct($actionLevel)
-{
-$this->actionLevel = Logger::toMonologLevel($actionLevel);
-}
-public function isHandlerActivated(array $record)
-{
-return $record['level'] >= $this->actionLevel;
-}
-}
-}
-namespace Monolog\Handler
-{
-use Monolog\Logger;
-class StreamHandler extends AbstractProcessingHandler
-{
-protected $stream;
-protected $url;
-private $errorMessage;
-protected $filePermission;
-protected $useLocking;
-private $dirCreated;
-public function __construct($stream, $level = Logger::DEBUG, $bubble = true, $filePermission = null, $useLocking = false)
-{
-parent::__construct($level, $bubble);
-if (is_resource($stream)) {
-$this->stream = $stream;
-} elseif (is_string($stream)) {
-$this->url = $stream;
-} else {
-throw new \InvalidArgumentException('A stream must either be a resource or a string.');
-}
-$this->filePermission = $filePermission;
-$this->useLocking = $useLocking;
-}
-public function close()
-{
-if ($this->url && is_resource($this->stream)) {
-fclose($this->stream);
-}
-$this->stream = null;
-}
-public function getStream()
-{
-return $this->stream;
-}
-public function getUrl()
-{
-return $this->url;
-}
-protected function write(array $record)
-{
-if (!is_resource($this->stream)) {
-if (null === $this->url ||''=== $this->url) {
-throw new \LogicException('Missing stream url, the stream can not be opened. This may be caused by a premature call to close().');
-}
-$this->createDir();
-$this->errorMessage = null;
-set_error_handler(array($this,'customErrorHandler'));
-$this->stream = fopen($this->url,'a');
-if ($this->filePermission !== null) {
-@chmod($this->url, $this->filePermission);
-}
-restore_error_handler();
-if (!is_resource($this->stream)) {
-$this->stream = null;
-throw new \UnexpectedValueException(sprintf('The stream or file "%s" could not be opened: '.$this->errorMessage, $this->url));
-}
-}
-if ($this->useLocking) {
-flock($this->stream, LOCK_EX);
-}
-$this->streamWrite($this->stream, $record);
-if ($this->useLocking) {
-flock($this->stream, LOCK_UN);
-}
-}
-protected function streamWrite($stream, array $record)
-{
-fwrite($stream, (string) $record['formatted']);
-}
-private function customErrorHandler($code, $msg)
-{
-$this->errorMessage = preg_replace('{^(fopen|mkdir)\(.*?\): }','', $msg);
-}
-private function getDirFromStream($stream)
-{
-$pos = strpos($stream,'://');
-if ($pos === false) {
-return dirname($stream);
-}
-if ('file://'=== substr($stream, 0, 7)) {
-return dirname(substr($stream, 7));
-}
-return;
-}
-private function createDir()
-{
-if ($this->dirCreated) {
-return;
-}
-$dir = $this->getDirFromStream($this->url);
-if (null !== $dir && !is_dir($dir)) {
-$this->errorMessage = null;
-set_error_handler(array($this,'customErrorHandler'));
-$status = mkdir($dir, 0777, true);
-restore_error_handler();
-if (false === $status) {
-throw new \UnexpectedValueException(sprintf('There is no existing directory at "%s" and its not buildable: '.$this->errorMessage, $dir));
-}
-}
-$this->dirCreated = true;
-}
-}
-}
-namespace Monolog\Handler
-{
-class TestHandler extends AbstractProcessingHandler
-{
-protected $records = array();
-protected $recordsByLevel = array();
-public function getRecords()
-{
-return $this->records;
-}
-public function clear()
-{
-$this->records = array();
-$this->recordsByLevel = array();
-}
-public function hasRecords($level)
-{
-return isset($this->recordsByLevel[$level]);
-}
-public function hasRecord($record, $level)
-{
-if (is_array($record)) {
-$record = $record['message'];
-}
-return $this->hasRecordThatPasses(function ($rec) use ($record) {
-return $rec['message'] === $record;
-}, $level);
-}
-public function hasRecordThatContains($message, $level)
-{
-return $this->hasRecordThatPasses(function ($rec) use ($message) {
-return strpos($rec['message'], $message) !== false;
-}, $level);
-}
-public function hasRecordThatMatches($regex, $level)
-{
-return $this->hasRecordThatPasses(function ($rec) use ($regex) {
-return preg_match($regex, $rec['message']) > 0;
-}, $level);
-}
-public function hasRecordThatPasses($predicate, $level)
-{
-if (!is_callable($predicate)) {
-throw new \InvalidArgumentException("Expected a callable for hasRecordThatSucceeds");
-}
-if (!isset($this->recordsByLevel[$level])) {
-return false;
-}
-foreach ($this->recordsByLevel[$level] as $i => $rec) {
-if (call_user_func($predicate, $rec, $i)) {
-return true;
-}
-}
-return false;
-}
-protected function write(array $record)
-{
-$this->recordsByLevel[$record['level']][] = $record;
-$this->records[] = $record;
-}
-public function __call($method, $args)
-{
-if (preg_match('/(.*)(Debug|Info|Notice|Warning|Error|Critical|Alert|Emergency)(.*)/', $method, $matches) > 0) {
-$genericMethod = $matches[1] . ('Records'!== $matches[3] ?'Record':'') . $matches[3];
-$level = constant('Monolog\Logger::'. strtoupper($matches[2]));
-if (method_exists($this, $genericMethod)) {
-$args[] = $level;
-return call_user_func_array(array($this, $genericMethod), $args);
-}
-}
-throw new \BadMethodCallException('Call to undefined method '. get_class($this) .'::'. $method .'()');
-}
-}
-}
-namespace Monolog
-{
-use Monolog\Handler\HandlerInterface;
-use Monolog\Handler\StreamHandler;
-use Psr\Log\LoggerInterface;
-use Psr\Log\InvalidArgumentException;
-class Logger implements LoggerInterface
-{
-const DEBUG = 100;
-const INFO = 200;
-const NOTICE = 250;
-const WARNING = 300;
-const ERROR = 400;
-const CRITICAL = 500;
-const ALERT = 550;
-const EMERGENCY = 600;
-const API = 1;
-protected static $levels = array(
-self::DEBUG =>'DEBUG',
-self::INFO =>'INFO',
-self::NOTICE =>'NOTICE',
-self::WARNING =>'WARNING',
-self::ERROR =>'ERROR',
-self::CRITICAL =>'CRITICAL',
-self::ALERT =>'ALERT',
-self::EMERGENCY =>'EMERGENCY',
-);
-protected static $timezone;
-protected $name;
-protected $handlers;
-protected $processors;
-protected $microsecondTimestamps = true;
-public function __construct($name, array $handlers = array(), array $processors = array())
-{
-$this->name = $name;
-$this->handlers = $handlers;
-$this->processors = $processors;
-}
-public function getName()
-{
-return $this->name;
-}
-public function withName($name)
-{
-$new = clone $this;
-$new->name = $name;
-return $new;
-}
-public function pushHandler(HandlerInterface $handler)
-{
-array_unshift($this->handlers, $handler);
-return $this;
-}
-public function popHandler()
-{
-if (!$this->handlers) {
-throw new \LogicException('You tried to pop from an empty handler stack.');
-}
-return array_shift($this->handlers);
-}
-public function setHandlers(array $handlers)
-{
-$this->handlers = array();
-foreach (array_reverse($handlers) as $handler) {
-$this->pushHandler($handler);
-}
-return $this;
-}
-public function getHandlers()
-{
-return $this->handlers;
-}
-public function pushProcessor($callback)
-{
-if (!is_callable($callback)) {
-throw new \InvalidArgumentException('Processors must be valid callables (callback or object with an __invoke method), '.var_export($callback, true).' given');
-}
-array_unshift($this->processors, $callback);
-return $this;
-}
-public function popProcessor()
-{
-if (!$this->processors) {
-throw new \LogicException('You tried to pop from an empty processor stack.');
-}
-return array_shift($this->processors);
-}
-public function getProcessors()
-{
-return $this->processors;
-}
-public function useMicrosecondTimestamps($micro)
-{
-$this->microsecondTimestamps = (bool) $micro;
-}
-public function addRecord($level, $message, array $context = array())
-{
-if (!$this->handlers) {
-$this->pushHandler(new StreamHandler('php://stderr', static::DEBUG));
-}
-$levelName = static::getLevelName($level);
-$handlerKey = null;
-reset($this->handlers);
-while ($handler = current($this->handlers)) {
-if ($handler->isHandling(array('level'=> $level))) {
-$handlerKey = key($this->handlers);
-break;
-}
-next($this->handlers);
-}
-if (null === $handlerKey) {
-return false;
-}
-if (!static::$timezone) {
-static::$timezone = new \DateTimeZone(date_default_timezone_get() ?:'UTC');
-}
-if ($this->microsecondTimestamps && PHP_VERSION_ID < 70100) {
-$ts = \DateTime::createFromFormat('U.u', sprintf('%.6F', microtime(true)), static::$timezone);
-} else {
-$ts = new \DateTime(null, static::$timezone);
-}
-$ts->setTimezone(static::$timezone);
-$record = array('message'=> (string) $message,'context'=> $context,'level'=> $level,'level_name'=> $levelName,'channel'=> $this->name,'datetime'=> $ts,'extra'=> array(),
-);
-foreach ($this->processors as $processor) {
-$record = call_user_func($processor, $record);
-}
-while ($handler = current($this->handlers)) {
-if (true === $handler->handle($record)) {
-break;
-}
-next($this->handlers);
-}
-return true;
-}
-public function addDebug($message, array $context = array())
-{
-return $this->addRecord(static::DEBUG, $message, $context);
-}
-public function addInfo($message, array $context = array())
-{
-return $this->addRecord(static::INFO, $message, $context);
-}
-public function addNotice($message, array $context = array())
-{
-return $this->addRecord(static::NOTICE, $message, $context);
-}
-public function addWarning($message, array $context = array())
-{
-return $this->addRecord(static::WARNING, $message, $context);
-}
-public function addError($message, array $context = array())
-{
-return $this->addRecord(static::ERROR, $message, $context);
-}
-public function addCritical($message, array $context = array())
-{
-return $this->addRecord(static::CRITICAL, $message, $context);
-}
-public function addAlert($message, array $context = array())
-{
-return $this->addRecord(static::ALERT, $message, $context);
-}
-public function addEmergency($message, array $context = array())
-{
-return $this->addRecord(static::EMERGENCY, $message, $context);
-}
-public static function getLevels()
-{
-return array_flip(static::$levels);
-}
-public static function getLevelName($level)
-{
-if (!isset(static::$levels[$level])) {
-throw new InvalidArgumentException('Level "'.$level.'" is not defined, use one of: '.implode(', ', array_keys(static::$levels)));
-}
-return static::$levels[$level];
-}
-public static function toMonologLevel($level)
-{
-if (is_string($level) && defined(__CLASS__.'::'.strtoupper($level))) {
-return constant(__CLASS__.'::'.strtoupper($level));
-}
-return $level;
-}
-public function isHandling($level)
-{
-$record = array('level'=> $level,
-);
-foreach ($this->handlers as $handler) {
-if ($handler->isHandling($record)) {
-return true;
-}
-}
-return false;
-}
-public function log($level, $message, array $context = array())
-{
-$level = static::toMonologLevel($level);
-return $this->addRecord($level, $message, $context);
-}
-public function debug($message, array $context = array())
-{
-return $this->addRecord(static::DEBUG, $message, $context);
-}
-public function info($message, array $context = array())
-{
-return $this->addRecord(static::INFO, $message, $context);
-}
-public function notice($message, array $context = array())
-{
-return $this->addRecord(static::NOTICE, $message, $context);
-}
-public function warn($message, array $context = array())
-{
-return $this->addRecord(static::WARNING, $message, $context);
-}
-public function warning($message, array $context = array())
-{
-return $this->addRecord(static::WARNING, $message, $context);
-}
-public function err($message, array $context = array())
-{
-return $this->addRecord(static::ERROR, $message, $context);
-}
-public function error($message, array $context = array())
-{
-return $this->addRecord(static::ERROR, $message, $context);
-}
-public function crit($message, array $context = array())
-{
-return $this->addRecord(static::CRITICAL, $message, $context);
-}
-public function critical($message, array $context = array())
-{
-return $this->addRecord(static::CRITICAL, $message, $context);
-}
-public function alert($message, array $context = array())
-{
-return $this->addRecord(static::ALERT, $message, $context);
-}
-public function emerg($message, array $context = array())
-{
-return $this->addRecord(static::EMERGENCY, $message, $context);
-}
-public function emergency($message, array $context = array())
-{
-return $this->addRecord(static::EMERGENCY, $message, $context);
-}
-public static function setTimezone(\DateTimeZone $tz)
-{
-self::$timezone = $tz;
-}
-}
-}
-namespace Sensio\Bundle\FrameworkExtraBundle\Configuration
-{
-interface ConfigurationInterface
-{
-public function getAliasName();
-public function allowArray();
-}
-}
-namespace Sensio\Bundle\FrameworkExtraBundle\Configuration
-{
-abstract class ConfigurationAnnotation implements ConfigurationInterface
-{
-public function __construct(array $values)
-{
-foreach ($values as $k => $v) {
-if (!method_exists($this, $name ='set'.$k)) {
-throw new \RuntimeException(sprintf('Unknown key "%s" for annotation "@%s".', $k, get_class($this)));
-}
-$this->$name($v);
-}
-}
-}
-}
 namespace Symfony\Component\EventDispatcher
 {
 interface EventSubscriberInterface
 {
 public static function getSubscribedEvents();
-}
-}
-namespace Sensio\Bundle\FrameworkExtraBundle\EventListener
-{
-use Doctrine\Common\Annotations\Reader;
-use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
-use Symfony\Component\HttpKernel\KernelEvents;
-use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\ConfigurationInterface;
-use Doctrine\Common\Util\ClassUtils;
-class ControllerListener implements EventSubscriberInterface
-{
-protected $reader;
-public function __construct(Reader $reader)
-{
-$this->reader = $reader;
-}
-public function onKernelController(FilterControllerEvent $event)
-{
-if (!is_array($controller = $event->getController())) {
-return;
-}
-$className = class_exists('Doctrine\Common\Util\ClassUtils') ? ClassUtils::getClass($controller[0]) : get_class($controller[0]);
-$object = new \ReflectionClass($className);
-$method = $object->getMethod($controller[1]);
-$classConfigurations = $this->getConfigurations($this->reader->getClassAnnotations($object));
-$methodConfigurations = $this->getConfigurations($this->reader->getMethodAnnotations($method));
-$configurations = array();
-foreach (array_merge(array_keys($classConfigurations), array_keys($methodConfigurations)) as $key) {
-if (!array_key_exists($key, $classConfigurations)) {
-$configurations[$key] = $methodConfigurations[$key];
-} elseif (!array_key_exists($key, $methodConfigurations)) {
-$configurations[$key] = $classConfigurations[$key];
-} else {
-if (is_array($classConfigurations[$key])) {
-if (!is_array($methodConfigurations[$key])) {
-throw new \UnexpectedValueException('Configurations should both be an array or both not be an array');
-}
-$configurations[$key] = array_merge($classConfigurations[$key], $methodConfigurations[$key]);
-} else {
-$configurations[$key] = $methodConfigurations[$key];
-}
-}
-}
-$request = $event->getRequest();
-foreach ($configurations as $key => $attributes) {
-$request->attributes->set($key, $attributes);
-}
-}
-protected function getConfigurations(array $annotations)
-{
-$configurations = array();
-foreach ($annotations as $configuration) {
-if ($configuration instanceof ConfigurationInterface) {
-if ($configuration->allowArray()) {
-$configurations['_'.$configuration->getAliasName()][] = $configuration;
-} elseif (!isset($configurations['_'.$configuration->getAliasName()])) {
-$configurations['_'.$configuration->getAliasName()] = $configuration;
-} else {
-throw new \LogicException(sprintf('Multiple "%s" annotations are not allowed.', $configuration->getAliasName()));
-}
-}
-}
-return $configurations;
-}
-public static function getSubscribedEvents()
-{
-return array(
-KernelEvents::CONTROLLER =>'onKernelController',
-);
-}
-}
-}
-namespace Sensio\Bundle\FrameworkExtraBundle\EventListener
-{
-use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
-use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
-use Symfony\Component\HttpKernel\KernelEvents;
-use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
-class HttpCacheListener implements EventSubscriberInterface
-{
-private $lastModifiedDates;
-private $etags;
-private $expressionLanguage;
-public function __construct()
-{
-$this->lastModifiedDates = new \SplObjectStorage();
-$this->etags = new \SplObjectStorage();
-}
-public function onKernelController(FilterControllerEvent $event)
-{
-$request = $event->getRequest();
-if (!$configuration = $request->attributes->get('_cache')) {
-return;
-}
-$response = new Response();
-$lastModifiedDate ='';
-if ($configuration->getLastModified()) {
-$lastModifiedDate = $this->getExpressionLanguage()->evaluate($configuration->getLastModified(), $request->attributes->all());
-$response->setLastModified($lastModifiedDate);
-}
-$etag ='';
-if ($configuration->getETag()) {
-$etag = hash('sha256', $this->getExpressionLanguage()->evaluate($configuration->getETag(), $request->attributes->all()));
-$response->setETag($etag);
-}
-if ($response->isNotModified($request)) {
-$event->setController(function () use ($response) {
-return $response;
-});
-} else {
-if ($etag) {
-$this->etags[$request] = $etag;
-}
-if ($lastModifiedDate) {
-$this->lastModifiedDates[$request] = $lastModifiedDate;
-}
-}
-}
-public function onKernelResponse(FilterResponseEvent $event)
-{
-$request = $event->getRequest();
-if (!$configuration = $request->attributes->get('_cache')) {
-return;
-}
-$response = $event->getResponse();
-if (!in_array($response->getStatusCode(), array(200, 203, 300, 301, 302, 304, 404, 410))) {
-return;
-}
-if (null !== $age = $configuration->getSMaxAge()) {
-if (!is_numeric($age)) {
-$now = microtime(true);
-$age = ceil(strtotime($configuration->getSMaxAge(), $now) - $now);
-}
-$response->setSharedMaxAge($age);
-}
-if (null !== $age = $configuration->getMaxAge()) {
-if (!is_numeric($age)) {
-$now = microtime(true);
-$age = ceil(strtotime($configuration->getMaxAge(), $now) - $now);
-}
-$response->setMaxAge($age);
-}
-if (null !== $configuration->getExpires()) {
-$date = \DateTime::createFromFormat('U', strtotime($configuration->getExpires()), new \DateTimeZone('UTC'));
-$response->setExpires($date);
-}
-if (null !== $configuration->getVary()) {
-$response->setVary($configuration->getVary());
-}
-if ($configuration->isPublic()) {
-$response->setPublic();
-}
-if ($configuration->isPrivate()) {
-$response->setPrivate();
-}
-if (isset($this->lastModifiedDates[$request])) {
-$response->setLastModified($this->lastModifiedDates[$request]);
-unset($this->lastModifiedDates[$request]);
-}
-if (isset($this->etags[$request])) {
-$response->setETag($this->etags[$request]);
-unset($this->etags[$request]);
-}
-$event->setResponse($response);
-}
-public static function getSubscribedEvents()
-{
-return array(
-KernelEvents::CONTROLLER =>'onKernelController',
-KernelEvents::RESPONSE =>'onKernelResponse',
-);
-}
-private function getExpressionLanguage()
-{
-if (null === $this->expressionLanguage) {
-if (!class_exists('Symfony\Component\ExpressionLanguage\ExpressionLanguage')) {
-throw new \RuntimeException('Unable to use expressions as the Symfony ExpressionLanguage component is not installed.');
-}
-$this->expressionLanguage = new ExpressionLanguage();
-}
-return $this->expressionLanguage;
-}
-}
-}
-namespace Sensio\Bundle\FrameworkExtraBundle\EventListener
-{
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\ParamConverter;
-use Sensio\Bundle\FrameworkExtraBundle\Request\ParamConverter\ParamConverterManager;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
-use Symfony\Component\HttpKernel\KernelEvents;
-use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-class ParamConverterListener implements EventSubscriberInterface
-{
-protected $manager;
-protected $autoConvert;
-public function __construct(ParamConverterManager $manager, $autoConvert = true)
-{
-$this->manager = $manager;
-$this->autoConvert = $autoConvert;
-}
-public function onKernelController(FilterControllerEvent $event)
-{
-$controller = $event->getController();
-$request = $event->getRequest();
-$configurations = array();
-if ($configuration = $request->attributes->get('_converters')) {
-foreach (is_array($configuration) ? $configuration : array($configuration) as $configuration) {
-$configurations[$configuration->getName()] = $configuration;
-}
-}
-if (is_array($controller)) {
-$r = new \ReflectionMethod($controller[0], $controller[1]);
-} elseif (is_object($controller) && is_callable($controller,'__invoke')) {
-$r = new \ReflectionMethod($controller,'__invoke');
-} else {
-$r = new \ReflectionFunction($controller);
-}
-if ($this->autoConvert) {
-$configurations = $this->autoConfigure($r, $request, $configurations);
-}
-$this->manager->apply($request, $configurations);
-}
-private function autoConfigure(\ReflectionFunctionAbstract $r, Request $request, $configurations)
-{
-foreach ($r->getParameters() as $param) {
-if (!$param->getClass() || $param->getClass()->isInstance($request)) {
-continue;
-}
-$name = $param->getName();
-if (!isset($configurations[$name])) {
-$configuration = new ParamConverter(array());
-$configuration->setName($name);
-$configuration->setClass($param->getClass()->getName());
-$configurations[$name] = $configuration;
-} elseif (null === $configurations[$name]->getClass()) {
-$configurations[$name]->setClass($param->getClass()->getName());
-}
-$configurations[$name]->setIsOptional($param->isOptional());
-}
-return $configurations;
-}
-public static function getSubscribedEvents()
-{
-return array(
-KernelEvents::CONTROLLER =>'onKernelController',
-);
-}
-}
-}
-namespace Sensio\Bundle\FrameworkExtraBundle\EventListener
-{
-use Sensio\Bundle\FrameworkExtraBundle\Security\ExpressionLanguage;
-use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
-use Symfony\Component\HttpKernel\KernelEvents;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Symfony\Component\Security\Core\Authentication\AuthenticationTrustResolverInterface;
-use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
-use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
-use Symfony\Component\Security\Core\SecurityContextInterface;
-use Symfony\Component\Security\Core\Exception\AccessDeniedException;
-use Symfony\Component\Security\Core\Role\RoleHierarchyInterface;
-class SecurityListener implements EventSubscriberInterface
-{
-private $tokenStorage;
-private $authChecker;
-private $language;
-private $trustResolver;
-private $roleHierarchy;
-public function __construct(SecurityContextInterface $securityContext = null, ExpressionLanguage $language = null, AuthenticationTrustResolverInterface $trustResolver = null, RoleHierarchyInterface $roleHierarchy = null, TokenStorageInterface $tokenStorage = null, AuthorizationCheckerInterface $authChecker = null)
-{
-$this->tokenStorage = $tokenStorage ?: $securityContext;
-$this->authChecker = $authChecker ?: $securityContext;
-$this->language = $language;
-$this->trustResolver = $trustResolver;
-$this->roleHierarchy = $roleHierarchy;
-}
-public function onKernelController(FilterControllerEvent $event)
-{
-$request = $event->getRequest();
-if (!$configuration = $request->attributes->get('_security')) {
-return;
-}
-if (null === $this->tokenStorage || null === $this->trustResolver) {
-throw new \LogicException('To use the @Security tag, you need to install the Symfony Security bundle.');
-}
-if (null === $this->tokenStorage->getToken()) {
-throw new \LogicException('To use the @Security tag, your controller needs to be behind a firewall.');
-}
-if (null === $this->language) {
-throw new \LogicException('To use the @Security tag, you need to use the Security component 2.4 or newer and to install the ExpressionLanguage component.');
-}
-if (!$this->language->evaluate($configuration->getExpression(), $this->getVariables($request))) {
-throw new AccessDeniedException(sprintf('Expression "%s" denied access.', $configuration->getExpression()));
-}
-}
-private function getVariables(Request $request)
-{
-$token = $this->tokenStorage->getToken();
-if (null !== $this->roleHierarchy) {
-$roles = $this->roleHierarchy->getReachableRoles($token->getRoles());
-} else {
-$roles = $token->getRoles();
-}
-$variables = array('token'=> $token,'user'=> $token->getUser(),'object'=> $request,'request'=> $request,'roles'=> array_map(function ($role) { return $role->getRole(); }, $roles),'trust_resolver'=> $this->trustResolver,'auth_checker'=> $this->authChecker,
-);
-return array_merge($request->attributes->all(), $variables);
-}
-public static function getSubscribedEvents()
-{
-return array(KernelEvents::CONTROLLER =>'onKernelController');
-}
-}
-}
-namespace Sensio\Bundle\FrameworkExtraBundle\EventListener
-{
-use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
-use Symfony\Component\HttpKernel\Event\GetResponseForControllerResultEvent;
-use Symfony\Component\HttpKernel\KernelEvents;
-use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Symfony\Component\HttpFoundation\StreamedResponse;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
-class TemplateListener implements EventSubscriberInterface
-{
-protected $container;
-public function __construct(ContainerInterface $container)
-{
-$this->container = $container;
-}
-public function onKernelController(FilterControllerEvent $event)
-{
-$request = $event->getRequest();
-$template = $request->attributes->get('_template');
-if (null === $template) {
-return;
-}
-if (!$template instanceof Template) {
-throw new \InvalidArgumentException('Request attribute "_template" is reserved for @Template annotations.');
-}
-$template->setOwner($controller = $event->getController());
-if (null === $template->getTemplate()) {
-$guesser = $this->container->get('sensio_framework_extra.view.guesser');
-$template->setTemplate($guesser->guessTemplateName($controller, $request, $template->getEngine()));
-}
-}
-public function onKernelView(GetResponseForControllerResultEvent $event)
-{
-$request = $event->getRequest();
-$template = $request->attributes->get('_template');
-if (null === $template) {
-return;
-}
-$parameters = $event->getControllerResult();
-$owner = $template->getOwner();
-list($controller, $action) = $owner;
-if (null === $parameters) {
-$parameters = $this->resolveDefaultParameters($request, $template, $controller, $action);
-}
-$templating = $this->container->get('templating');
-if ($template->isStreamable()) {
-$callback = function () use ($templating, $template, $parameters) {
-return $templating->stream($template->getTemplate(), $parameters);
-};
-$event->setResponse(new StreamedResponse($callback));
-}
-$template->setOwner(array());
-$event->setResponse($templating->renderResponse($template->getTemplate(), $parameters));
-}
-public static function getSubscribedEvents()
-{
-return array(
-KernelEvents::CONTROLLER => array('onKernelController', -128),
-KernelEvents::VIEW =>'onKernelView',
-);
-}
-private function resolveDefaultParameters(Request $request, Template $template, $controller, $action)
-{
-$parameters = array();
-$arguments = $template->getVars();
-if (0 === count($arguments)) {
-$r = new \ReflectionObject($controller);
-$arguments = array();
-foreach ($r->getMethod($action)->getParameters() as $param) {
-$arguments[] = $param->getName();
-}
-}
-foreach ($arguments as $argument) {
-$parameters[$argument] = $request->attributes->get($argument);
-}
-return $parameters;
-}
-}
-}
-namespace Sensio\Bundle\FrameworkExtraBundle\Request\ParamConverter
-{
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\ParamConverter;
-use Symfony\Component\HttpFoundation\Request;
-interface ParamConverterInterface
-{
-public function apply(Request $request, ParamConverter $configuration);
-public function supports(ParamConverter $configuration);
-}
-}
-namespace Sensio\Bundle\FrameworkExtraBundle\Request\ParamConverter
-{
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\ParamConverter;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use DateTime;
-class DateTimeParamConverter implements ParamConverterInterface
-{
-public function apply(Request $request, ParamConverter $configuration)
-{
-$param = $configuration->getName();
-if (!$request->attributes->has($param)) {
-return false;
-}
-$options = $configuration->getOptions();
-$value = $request->attributes->get($param);
-if (!$value && $configuration->isOptional()) {
-return false;
-}
-if (isset($options['format'])) {
-$date = DateTime::createFromFormat($options['format'], $value);
-if (!$date) {
-throw new NotFoundHttpException('Invalid date given.');
-}
-} else {
-if (false === strtotime($value)) {
-throw new NotFoundHttpException('Invalid date given.');
-}
-$date = new DateTime($value);
-}
-$request->attributes->set($param, $date);
-return true;
-}
-public function supports(ParamConverter $configuration)
-{
-if (null === $configuration->getClass()) {
-return false;
-}
-return'DateTime'=== $configuration->getClass();
-}
-}
-}
-namespace Sensio\Bundle\FrameworkExtraBundle\Request\ParamConverter
-{
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\ParamConverter;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Symfony\Component\HttpFoundation\Request;
-use Doctrine\Common\Persistence\ManagerRegistry;
-use Doctrine\ORM\NoResultException;
-class DoctrineParamConverter implements ParamConverterInterface
-{
-protected $registry;
-public function __construct(ManagerRegistry $registry = null)
-{
-$this->registry = $registry;
-}
-public function apply(Request $request, ParamConverter $configuration)
-{
-$name = $configuration->getName();
-$class = $configuration->getClass();
-$options = $this->getOptions($configuration);
-if (null === $request->attributes->get($name, false)) {
-$configuration->setIsOptional(true);
-}
-if (false === $object = $this->find($class, $request, $options, $name)) {
-if (false === $object = $this->findOneBy($class, $request, $options)) {
-if ($configuration->isOptional()) {
-$object = null;
-} else {
-throw new \LogicException('Unable to guess how to get a Doctrine instance from the request information.');
-}
-}
-}
-if (null === $object && false === $configuration->isOptional()) {
-throw new NotFoundHttpException(sprintf('%s object not found.', $class));
-}
-$request->attributes->set($name, $object);
-return true;
-}
-protected function find($class, Request $request, $options, $name)
-{
-if ($options['mapping'] || $options['exclude']) {
-return false;
-}
-$id = $this->getIdentifier($request, $options, $name);
-if (false === $id || null === $id) {
-return false;
-}
-if (isset($options['repository_method'])) {
-$method = $options['repository_method'];
-} else {
-$method ='find';
-}
-try {
-return $this->getManager($options['entity_manager'], $class)->getRepository($class)->$method($id);
-} catch (NoResultException $e) {
-return;
-}
-}
-protected function getIdentifier(Request $request, $options, $name)
-{
-if (isset($options['id'])) {
-if (!is_array($options['id'])) {
-$name = $options['id'];
-} elseif (is_array($options['id'])) {
-$id = array();
-foreach ($options['id'] as $field) {
-$id[$field] = $request->attributes->get($field);
-}
-return $id;
-}
-}
-if ($request->attributes->has($name)) {
-return $request->attributes->get($name);
-}
-if ($request->attributes->has('id') && !isset($options['id'])) {
-return $request->attributes->get('id');
-}
-return false;
-}
-protected function findOneBy($class, Request $request, $options)
-{
-if (!$options['mapping']) {
-$keys = $request->attributes->keys();
-$options['mapping'] = $keys ? array_combine($keys, $keys) : array();
-}
-foreach ($options['exclude'] as $exclude) {
-unset($options['mapping'][$exclude]);
-}
-if (!$options['mapping']) {
-return false;
-}
-if (isset($options['id']) && null === $request->attributes->get($options['id'])) {
-return false;
-}
-$criteria = array();
-$em = $this->getManager($options['entity_manager'], $class);
-$metadata = $em->getClassMetadata($class);
-$mapMethodSignature = isset($options['repository_method'])
-&& isset($options['map_method_signature'])
-&& $options['map_method_signature'] === true;
-foreach ($options['mapping'] as $attribute => $field) {
-if ($metadata->hasField($field)
-|| ($metadata->hasAssociation($field) && $metadata->isSingleValuedAssociation($field))
-|| $mapMethodSignature) {
-$criteria[$field] = $request->attributes->get($attribute);
-}
-}
-if ($options['strip_null']) {
-$criteria = array_filter($criteria, function ($value) { return !is_null($value); });
-}
-if (!$criteria) {
-return false;
-}
-if (isset($options['repository_method'])) {
-$repositoryMethod = $options['repository_method'];
-} else {
-$repositoryMethod ='findOneBy';
-}
-try {
-if ($mapMethodSignature) {
-return $this->findDataByMapMethodSignature($em, $class, $repositoryMethod, $criteria);
-}
-return $em->getRepository($class)->$repositoryMethod($criteria);
-} catch (NoResultException $e) {
-return;
-}
-}
-private function findDataByMapMethodSignature($em, $class, $repositoryMethod, $criteria)
-{
-$arguments = array();
-$repository = $em->getRepository($class);
-$ref = new \ReflectionMethod($repository, $repositoryMethod);
-foreach ($ref->getParameters() as $parameter) {
-if (array_key_exists($parameter->name, $criteria)) {
-$arguments[] = $criteria[$parameter->name];
-} elseif ($parameter->isDefaultValueAvailable()) {
-$arguments[] = $parameter->getDefaultValue();
-} else {
-throw new \InvalidArgumentException(sprintf('Repository method "%s::%s" requires that you provide a value for the "$%s" argument.', get_class($repository), $repositoryMethod, $parameter->name));
-}
-}
-return $ref->invokeArgs($repository, $arguments);
-}
-public function supports(ParamConverter $configuration)
-{
-if (null === $this->registry || !count($this->registry->getManagers())) {
-return false;
-}
-if (null === $configuration->getClass()) {
-return false;
-}
-$options = $this->getOptions($configuration);
-$em = $this->getManager($options['entity_manager'], $configuration->getClass());
-if (null === $em) {
-return false;
-}
-return !$em->getMetadataFactory()->isTransient($configuration->getClass());
-}
-protected function getOptions(ParamConverter $configuration)
-{
-return array_replace(array('entity_manager'=> null,'exclude'=> array(),'mapping'=> array(),'strip_null'=> false,
-), $configuration->getOptions());
-}
-private function getManager($name, $class)
-{
-if (null === $name) {
-return $this->registry->getManagerForClass($class);
-}
-return $this->registry->getManager($name);
-}
-}
-}
-namespace Sensio\Bundle\FrameworkExtraBundle\Request\ParamConverter
-{
-use Symfony\Component\HttpFoundation\Request;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\ConfigurationInterface;
-class ParamConverterManager
-{
-protected $converters = array();
-protected $namedConverters = array();
-public function apply(Request $request, $configurations)
-{
-if (is_object($configurations)) {
-$configurations = array($configurations);
-}
-foreach ($configurations as $configuration) {
-$this->applyConverter($request, $configuration);
-}
-}
-protected function applyConverter(Request $request, ConfigurationInterface $configuration)
-{
-$value = $request->attributes->get($configuration->getName());
-$className = $configuration->getClass();
-if (is_object($value) && $value instanceof $className) {
-return;
-}
-if ($converterName = $configuration->getConverter()) {
-if (!isset($this->namedConverters[$converterName])) {
-throw new \RuntimeException(sprintf("No converter named '%s' found for conversion of parameter '%s'.",
-$converterName, $configuration->getName()
-));
-}
-$converter = $this->namedConverters[$converterName];
-if (!$converter->supports($configuration)) {
-throw new \RuntimeException(sprintf("Converter '%s' does not support conversion of parameter '%s'.",
-$converterName, $configuration->getName()
-));
-}
-$converter->apply($request, $configuration);
-return;
-}
-foreach ($this->all() as $converter) {
-if ($converter->supports($configuration)) {
-if ($converter->apply($request, $configuration)) {
-return;
-}
-}
-}
-}
-public function add(ParamConverterInterface $converter, $priority = 0, $name = null)
-{
-if ($priority !== null) {
-if (!isset($this->converters[$priority])) {
-$this->converters[$priority] = array();
-}
-$this->converters[$priority][] = $converter;
-}
-if (null !== $name) {
-$this->namedConverters[$name] = $converter;
-}
-}
-public function all()
-{
-krsort($this->converters);
-$converters = array();
-foreach ($this->converters as $all) {
-$converters = array_merge($converters, $all);
-}
-return $converters;
-}
-}
-}
-namespace Symfony\Component\HttpKernel\Log
-{
-interface DebugLoggerInterface
-{
-public function getLogs();
-public function countErrors();
-}
-}
-namespace Symfony\Bridge\Monolog
-{
-use Monolog\Logger as BaseLogger;
-use Symfony\Component\HttpKernel\Log\DebugLoggerInterface;
-class Logger extends BaseLogger implements DebugLoggerInterface
-{
-public function getLogs()
-{
-if ($logger = $this->getDebugLogger()) {
-return $logger->getLogs();
-}
-return array();
-}
-public function countErrors()
-{
-if ($logger = $this->getDebugLogger()) {
-return $logger->countErrors();
-}
-return 0;
-}
-private function getDebugLogger()
-{
-foreach ($this->processors as $processor) {
-if ($processor instanceof DebugLoggerInterface) {
-return $processor;
-}
-}
-foreach ($this->handlers as $handler) {
-if ($handler instanceof DebugLoggerInterface) {
-return $handler;
-}
-}
-}
-}
-}
-namespace Symfony\Bundle\FrameworkBundle\Controller
-{
-use Symfony\Component\HttpKernel\KernelInterface;
-class ControllerNameParser
-{
-protected $kernel;
-public function __construct(KernelInterface $kernel)
-{
-$this->kernel = $kernel;
-}
-public function parse($controller)
-{
-$parts = explode(':', $controller);
-if (3 !== count($parts) || in_array('', $parts, true)) {
-throw new \InvalidArgumentException(sprintf('The "%s" controller is not a valid "a:b:c" controller string.', $controller));
-}
-$originalController = $controller;
-list($bundle, $controller, $action) = $parts;
-$controller = str_replace('/','\\', $controller);
-$bundles = array();
-try {
-$allBundles = $this->kernel->getBundle($bundle, false);
-} catch (\InvalidArgumentException $e) {
-$message = sprintf('The "%s" (from the _controller value "%s") does not exist or is not enabled in your kernel!',
-$bundle,
-$originalController
-);
-if ($alternative = $this->findAlternative($bundle)) {
-$message .= sprintf(' Did you mean "%s:%s:%s"?', $alternative, $controller, $action);
-}
-throw new \InvalidArgumentException($message, 0, $e);
-}
-foreach ($allBundles as $b) {
-$try = $b->getNamespace().'\\Controller\\'.$controller.'Controller';
-if (class_exists($try)) {
-return $try.'::'.$action.'Action';
-}
-$bundles[] = $b->getName();
-$msg = sprintf('The _controller value "%s:%s:%s" maps to a "%s" class, but this class was not found. Create this class or check the spelling of the class and its namespace.', $bundle, $controller, $action, $try);
-}
-if (count($bundles) > 1) {
-$msg = sprintf('Unable to find controller "%s:%s" in bundles %s.', $bundle, $controller, implode(', ', $bundles));
-}
-throw new \InvalidArgumentException($msg);
-}
-public function build($controller)
-{
-if (0 === preg_match('#^(.*?\\\\Controller\\\\(.+)Controller)::(.+)Action$#', $controller, $match)) {
-throw new \InvalidArgumentException(sprintf('The "%s" controller is not a valid "class::method" string.', $controller));
-}
-$className = $match[1];
-$controllerName = $match[2];
-$actionName = $match[3];
-foreach ($this->kernel->getBundles() as $name => $bundle) {
-if (0 !== strpos($className, $bundle->getNamespace())) {
-continue;
-}
-return sprintf('%s:%s:%s', $name, $controllerName, $actionName);
-}
-throw new \InvalidArgumentException(sprintf('Unable to find a bundle that defines controller "%s".', $controller));
-}
-private function findAlternative($nonExistentBundleName)
-{
-$bundleNames = array_map(function ($b) {
-return $b->getName();
-}, $this->kernel->getBundles());
-$alternative = null;
-$shortest = null;
-foreach ($bundleNames as $bundleName) {
-if (false !== strpos($bundleName, $nonExistentBundleName)) {
-return $bundleName;
-}
-$lev = levenshtein($nonExistentBundleName, $bundleName);
-if ($lev <= strlen($nonExistentBundleName) / 3 && ($alternative === null || $lev < $shortest)) {
-$alternative = $bundleName;
-$shortest = $lev;
-}
-}
-return $alternative;
-}
-}
-}
-namespace Symfony\Component\HttpKernel\Controller
-{
-use Symfony\Component\HttpFoundation\Request;
-interface ControllerResolverInterface
-{
-public function getController(Request $request);
-public function getArguments(Request $request, $controller);
-}
-}
-namespace Symfony\Component\HttpKernel\Controller
-{
-use Symfony\Component\HttpFoundation\Request;
-interface ArgumentResolverInterface
-{
-public function getArguments(Request $request, $controller);
-}
-}
-namespace Symfony\Component\HttpKernel\Controller
-{
-use Psr\Log\LoggerInterface;
-use Symfony\Component\HttpFoundation\Request;
-class ControllerResolver implements ArgumentResolverInterface, ControllerResolverInterface
-{
-private $logger;
-private $supportsVariadic;
-public function __construct(LoggerInterface $logger = null)
-{
-$this->logger = $logger;
-$this->supportsVariadic = method_exists('ReflectionParameter','isVariadic');
-}
-public function getController(Request $request)
-{
-if (!$controller = $request->attributes->get('_controller')) {
-if (null !== $this->logger) {
-$this->logger->warning('Unable to look for the controller as the "_controller" parameter is missing.');
-}
-return false;
-}
-if (is_array($controller)) {
-return $controller;
-}
-if (is_object($controller)) {
-if (method_exists($controller,'__invoke')) {
-return $controller;
-}
-throw new \InvalidArgumentException(sprintf('Controller "%s" for URI "%s" is not callable.', get_class($controller), $request->getPathInfo()));
-}
-if (false === strpos($controller,':')) {
-if (method_exists($controller,'__invoke')) {
-return $this->instantiateController($controller);
-} elseif (function_exists($controller)) {
-return $controller;
-}
-}
-$callable = $this->createController($controller);
-if (!is_callable($callable)) {
-throw new \InvalidArgumentException(sprintf('The controller for URI "%s" is not callable. %s', $request->getPathInfo(), $this->getControllerError($callable)));
-}
-return $callable;
-}
-public function getArguments(Request $request, $controller)
-{
-@trigger_error(sprintf('%s is deprecated as of 3.1 and will be removed in 4.0. Implement the %s and inject it in the HttpKernel instead.', __METHOD__, ArgumentResolverInterface::class), E_USER_DEPRECATED);
-if (is_array($controller)) {
-$r = new \ReflectionMethod($controller[0], $controller[1]);
-} elseif (is_object($controller) && !$controller instanceof \Closure) {
-$r = new \ReflectionObject($controller);
-$r = $r->getMethod('__invoke');
-} else {
-$r = new \ReflectionFunction($controller);
-}
-return $this->doGetArguments($request, $controller, $r->getParameters());
-}
-protected function doGetArguments(Request $request, $controller, array $parameters)
-{
-@trigger_error(sprintf('%s is deprecated as of 3.1 and will be removed in 4.0. Implement the %s and inject it in the HttpKernel instead.', __METHOD__, ArgumentResolverInterface::class), E_USER_DEPRECATED);
-$attributes = $request->attributes->all();
-$arguments = array();
-foreach ($parameters as $param) {
-if (array_key_exists($param->name, $attributes)) {
-if ($this->supportsVariadic && $param->isVariadic() && is_array($attributes[$param->name])) {
-$arguments = array_merge($arguments, array_values($attributes[$param->name]));
-} else {
-$arguments[] = $attributes[$param->name];
-}
-} elseif ($param->getClass() && $param->getClass()->isInstance($request)) {
-$arguments[] = $request;
-} elseif ($param->isDefaultValueAvailable()) {
-$arguments[] = $param->getDefaultValue();
-} elseif ($param->allowsNull()) {
-$arguments[] = null;
-} else {
-if (is_array($controller)) {
-$repr = sprintf('%s::%s()', get_class($controller[0]), $controller[1]);
-} elseif (is_object($controller)) {
-$repr = get_class($controller);
-} else {
-$repr = $controller;
-}
-throw new \RuntimeException(sprintf('Controller "%s" requires that you provide a value for the "$%s" argument (because there is no default value or because there is a non optional argument after this one).', $repr, $param->name));
-}
-}
-return $arguments;
-}
-protected function createController($controller)
-{
-if (false === strpos($controller,'::')) {
-throw new \InvalidArgumentException(sprintf('Unable to find controller "%s".', $controller));
-}
-list($class, $method) = explode('::', $controller, 2);
-if (!class_exists($class)) {
-throw new \InvalidArgumentException(sprintf('Class "%s" does not exist.', $class));
-}
-return array($this->instantiateController($class), $method);
-}
-protected function instantiateController($class)
-{
-return new $class();
-}
-private function getControllerError($callable)
-{
-if (is_string($callable)) {
-if (false !== strpos($callable,'::')) {
-$callable = explode('::', $callable);
-}
-if (class_exists($callable) && !method_exists($callable,'__invoke')) {
-return sprintf('Class "%s" does not have a method "__invoke".', $callable);
-}
-if (!function_exists($callable)) {
-return sprintf('Function "%s" does not exist.', $callable);
-}
-}
-if (!is_array($callable)) {
-return sprintf('Invalid type for controller given, expected string or array, got "%s".', gettype($callable));
-}
-if (2 !== count($callable)) {
-return sprintf('Invalid format for controller, expected array(controller, method) or controller::method.');
-}
-list($controller, $method) = $callable;
-if (is_string($controller) && !class_exists($controller)) {
-return sprintf('Class "%s" does not exist.', $controller);
-}
-$className = is_object($controller) ? get_class($controller) : $controller;
-if (method_exists($controller, $method)) {
-return sprintf('Method "%s" on class "%s" should be public and non-abstract.', $method, $className);
-}
-$collection = get_class_methods($controller);
-$alternatives = array();
-foreach ($collection as $item) {
-$lev = levenshtein($method, $item);
-if ($lev <= strlen($method) / 3 || false !== strpos($item, $method)) {
-$alternatives[] = $item;
-}
-}
-asort($alternatives);
-$message = sprintf('Expected method "%s" on class "%s"', $method, $className);
-if (count($alternatives) > 0) {
-$message .= sprintf(', did you mean "%s"?', implode('", "', $alternatives));
-} else {
-$message .= sprintf('. Available methods: "%s".', implode('", "', $collection));
-}
-return $message;
-}
-}
-}
-namespace Symfony\Bundle\FrameworkBundle\Controller
-{
-use Psr\Log\LoggerInterface;
-use Symfony\Component\HttpKernel\Controller\ControllerResolver as BaseControllerResolver;
-use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\DependencyInjection\ContainerAwareInterface;
-class ControllerResolver extends BaseControllerResolver
-{
-protected $container;
-protected $parser;
-public function __construct(ContainerInterface $container, ControllerNameParser $parser, LoggerInterface $logger = null)
-{
-$this->container = $container;
-$this->parser = $parser;
-parent::__construct($logger);
-}
-protected function createController($controller)
-{
-if (false === strpos($controller,'::')) {
-$count = substr_count($controller,':');
-if (2 == $count) {
-$controller = $this->parser->parse($controller);
-} elseif (1 == $count) {
-list($service, $method) = explode(':', $controller, 2);
-return array($this->container->get($service), $method);
-} elseif ($this->container->has($controller) && method_exists($service = $this->container->get($controller),'__invoke')) {
-return $service;
-} else {
-throw new \LogicException(sprintf('Unable to parse the controller name "%s".', $controller));
-}
-}
-return parent::createController($controller);
-}
-protected function instantiateController($class)
-{
-if ($this->container->has($class)) {
-return $this->container->get($class);
-}
-$controller = parent::instantiateController($class);
-if ($controller instanceof ContainerAwareInterface) {
-$controller->setContainer($this->container);
-}
-return $controller;
-}
 }
 }
 namespace Symfony\Component\HttpKernel\EventListener
@@ -2861,515 +54,468 @@ return $this->container->get('session');
 }
 }
 }
-namespace Symfony\Component\Routing\Matcher
+namespace Symfony\Component\HttpFoundation\Session\Storage
 {
-interface RedirectableUrlMatcherInterface
+use Symfony\Component\HttpFoundation\Session\SessionBagInterface;
+interface SessionStorageInterface
 {
-public function redirect($path, $route, $scheme = null);
+public function start();
+public function isStarted();
+public function getId();
+public function setId($id);
+public function getName();
+public function setName($name);
+public function regenerate($destroy = false, $lifetime = null);
+public function save();
+public function clear();
+public function getBag($name);
+public function registerBag(SessionBagInterface $bag);
+public function getMetadataBag();
 }
 }
-namespace Symfony\Component\Routing
+namespace Symfony\Component\HttpFoundation\Session\Storage
 {
-interface RequestContextAwareInterface
+use Symfony\Component\HttpFoundation\Session\SessionBagInterface;
+use Symfony\Component\HttpFoundation\Session\Storage\Handler\NativeSessionHandler;
+use Symfony\Component\HttpFoundation\Session\Storage\Proxy\AbstractProxy;
+use Symfony\Component\HttpFoundation\Session\Storage\Proxy\SessionHandlerProxy;
+class NativeSessionStorage implements SessionStorageInterface
 {
-public function setContext(RequestContext $context);
-public function getContext();
-}
-}
-namespace Symfony\Component\Routing\Matcher
+protected $bags;
+protected $started = false;
+protected $closed = false;
+protected $saveHandler;
+protected $metadataBag;
+public function __construct(array $options = array(), $handler = null, MetadataBag $metaBag = null)
 {
-use Symfony\Component\Routing\RequestContextAwareInterface;
-use Symfony\Component\Routing\Exception\ResourceNotFoundException;
-use Symfony\Component\Routing\Exception\MethodNotAllowedException;
-interface UrlMatcherInterface extends RequestContextAwareInterface
-{
-public function match($pathinfo);
-}
-}
-namespace Symfony\Component\Routing\Matcher
-{
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\Routing\Exception\ResourceNotFoundException;
-use Symfony\Component\Routing\Exception\MethodNotAllowedException;
-interface RequestMatcherInterface
-{
-public function matchRequest(Request $request);
-}
-}
-namespace Symfony\Component\Routing\Matcher
-{
-use Symfony\Component\Routing\Exception\MethodNotAllowedException;
-use Symfony\Component\Routing\Exception\ResourceNotFoundException;
-use Symfony\Component\Routing\RouteCollection;
-use Symfony\Component\Routing\RequestContext;
-use Symfony\Component\Routing\Route;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
-use Symfony\Component\ExpressionLanguage\ExpressionFunctionProviderInterface;
-class UrlMatcher implements UrlMatcherInterface, RequestMatcherInterface
-{
-const REQUIREMENT_MATCH = 0;
-const REQUIREMENT_MISMATCH = 1;
-const ROUTE_MATCH = 2;
-protected $context;
-protected $allow = array();
-protected $routes;
-protected $request;
-protected $expressionLanguage;
-protected $expressionLanguageProviders = array();
-public function __construct(RouteCollection $routes, RequestContext $context)
-{
-$this->routes = $routes;
-$this->context = $context;
-}
-public function setContext(RequestContext $context)
-{
-$this->context = $context;
-}
-public function getContext()
-{
-return $this->context;
-}
-public function match($pathinfo)
-{
-$this->allow = array();
-if ($ret = $this->matchCollection(rawurldecode($pathinfo), $this->routes)) {
-return $ret;
-}
-throw 0 < count($this->allow)
-? new MethodNotAllowedException(array_unique($this->allow))
-: new ResourceNotFoundException(sprintf('No routes found for "%s".', $pathinfo));
-}
-public function matchRequest(Request $request)
-{
-$this->request = $request;
-$ret = $this->match($request->getPathInfo());
-$this->request = null;
-return $ret;
-}
-public function addExpressionLanguageProvider(ExpressionFunctionProviderInterface $provider)
-{
-$this->expressionLanguageProviders[] = $provider;
-}
-protected function matchCollection($pathinfo, RouteCollection $routes)
-{
-foreach ($routes as $name => $route) {
-$compiledRoute = $route->compile();
-if (''!== $compiledRoute->getStaticPrefix() && 0 !== strpos($pathinfo, $compiledRoute->getStaticPrefix())) {
-continue;
-}
-if (!preg_match($compiledRoute->getRegex(), $pathinfo, $matches)) {
-continue;
-}
-$hostMatches = array();
-if ($compiledRoute->getHostRegex() && !preg_match($compiledRoute->getHostRegex(), $this->context->getHost(), $hostMatches)) {
-continue;
-}
-if ($requiredMethods = $route->getMethods()) {
-if ('HEAD'=== $method = $this->context->getMethod()) {
-$method ='GET';
-}
-if (!in_array($method, $requiredMethods)) {
-$this->allow = array_merge($this->allow, $requiredMethods);
-continue;
-}
-}
-$status = $this->handleRouteRequirements($pathinfo, $name, $route);
-if (self::ROUTE_MATCH === $status[0]) {
-return $status[1];
-}
-if (self::REQUIREMENT_MISMATCH === $status[0]) {
-continue;
-}
-return $this->getAttributes($route, $name, array_replace($matches, $hostMatches));
-}
-}
-protected function getAttributes(Route $route, $name, array $attributes)
-{
-$attributes['_route'] = $name;
-return $this->mergeDefaults($attributes, $route->getDefaults());
-}
-protected function handleRouteRequirements($pathinfo, $name, Route $route)
-{
-if ($route->getCondition() && !$this->getExpressionLanguage()->evaluate($route->getCondition(), array('context'=> $this->context,'request'=> $this->request))) {
-return array(self::REQUIREMENT_MISMATCH, null);
-}
-$scheme = $this->context->getScheme();
-$status = $route->getSchemes() && !$route->hasScheme($scheme) ? self::REQUIREMENT_MISMATCH : self::REQUIREMENT_MATCH;
-return array($status, null);
-}
-protected function mergeDefaults($params, $defaults)
-{
-foreach ($params as $key => $value) {
-if (!is_int($key)) {
-$defaults[$key] = $value;
-}
-}
-return $defaults;
-}
-protected function getExpressionLanguage()
-{
-if (null === $this->expressionLanguage) {
-if (!class_exists('Symfony\Component\ExpressionLanguage\ExpressionLanguage')) {
-throw new \RuntimeException('Unable to use expressions as the Symfony ExpressionLanguage component is not installed.');
-}
-$this->expressionLanguage = new ExpressionLanguage(null, $this->expressionLanguageProviders);
-}
-return $this->expressionLanguage;
-}
-}
-}
-namespace Symfony\Component\Routing\Matcher
-{
-use Symfony\Component\Routing\Exception\ResourceNotFoundException;
-use Symfony\Component\Routing\Route;
-abstract class RedirectableUrlMatcher extends UrlMatcher implements RedirectableUrlMatcherInterface
-{
-public function match($pathinfo)
-{
-try {
-$parameters = parent::match($pathinfo);
-} catch (ResourceNotFoundException $e) {
-if ('/'=== substr($pathinfo, -1) || !in_array($this->context->getMethod(), array('HEAD','GET'))) {
-throw $e;
-}
-try {
-parent::match($pathinfo.'/');
-return $this->redirect($pathinfo.'/', null);
-} catch (ResourceNotFoundException $e2) {
-throw $e;
-}
-}
-return $parameters;
-}
-protected function handleRouteRequirements($pathinfo, $name, Route $route)
-{
-if ($route->getCondition() && !$this->getExpressionLanguage()->evaluate($route->getCondition(), array('context'=> $this->context,'request'=> $this->request))) {
-return array(self::REQUIREMENT_MISMATCH, null);
-}
-$scheme = $this->context->getScheme();
-$schemes = $route->getSchemes();
-if ($schemes && !$route->hasScheme($scheme)) {
-return array(self::ROUTE_MATCH, $this->redirect($pathinfo, $name, current($schemes)));
-}
-return array(self::REQUIREMENT_MATCH, null);
-}
-}
-}
-namespace Symfony\Bundle\FrameworkBundle\Routing
-{
-use Symfony\Component\Routing\Matcher\RedirectableUrlMatcher as BaseMatcher;
-class RedirectableUrlMatcher extends BaseMatcher
-{
-public function redirect($path, $route, $scheme = null)
-{
-return array('_controller'=>'Symfony\\Bundle\\FrameworkBundle\\Controller\\RedirectController::urlRedirectAction','path'=> $path,'permanent'=> true,'scheme'=> $scheme,'httpPort'=> $this->context->getHttpPort(),'httpsPort'=> $this->context->getHttpsPort(),'_route'=> $route,
-);
-}
-}
-}
-namespace Symfony\Component\Routing\Generator
-{
-use Symfony\Component\Routing\Exception\InvalidParameterException;
-use Symfony\Component\Routing\Exception\MissingMandatoryParametersException;
-use Symfony\Component\Routing\Exception\RouteNotFoundException;
-use Symfony\Component\Routing\RequestContextAwareInterface;
-interface UrlGeneratorInterface extends RequestContextAwareInterface
-{
-const ABSOLUTE_URL = 0;
-const ABSOLUTE_PATH = 1;
-const RELATIVE_PATH = 2;
-const NETWORK_PATH = 3;
-public function generate($name, $parameters = array(), $referenceType = self::ABSOLUTE_PATH);
-}
-}
-namespace Symfony\Component\Routing
-{
-use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
-use Symfony\Component\Routing\Matcher\UrlMatcherInterface;
-interface RouterInterface extends UrlMatcherInterface, UrlGeneratorInterface
-{
-public function getRouteCollection();
-}
-}
-namespace Symfony\Component\HttpKernel\CacheWarmer
-{
-interface WarmableInterface
-{
-public function warmUp($cacheDir);
-}
-}
-namespace Symfony\Component\Routing
-{
-use Symfony\Component\Config\Loader\LoaderInterface;
-use Symfony\Component\Config\ConfigCacheInterface;
-use Symfony\Component\Config\ConfigCacheFactoryInterface;
-use Symfony\Component\Config\ConfigCacheFactory;
-use Psr\Log\LoggerInterface;
-use Symfony\Component\Routing\Generator\ConfigurableRequirementsInterface;
-use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
-use Symfony\Component\Routing\Generator\Dumper\GeneratorDumperInterface;
-use Symfony\Component\Routing\Matcher\RequestMatcherInterface;
-use Symfony\Component\Routing\Matcher\UrlMatcherInterface;
-use Symfony\Component\Routing\Matcher\Dumper\MatcherDumperInterface;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\ExpressionLanguage\ExpressionFunctionProviderInterface;
-class Router implements RouterInterface, RequestMatcherInterface
-{
-protected $matcher;
-protected $generator;
-protected $context;
-protected $loader;
-protected $collection;
-protected $resource;
-protected $options = array();
-protected $logger;
-private $configCacheFactory;
-private $expressionLanguageProviders = array();
-public function __construct(LoaderInterface $loader, $resource, array $options = array(), RequestContext $context = null, LoggerInterface $logger = null)
-{
-$this->loader = $loader;
-$this->resource = $resource;
-$this->logger = $logger;
-$this->context = $context ?: new RequestContext();
+session_cache_limiter(''); ini_set('session.use_cookies', 1);
+session_register_shutdown();
+$this->setMetadataBag($metaBag);
 $this->setOptions($options);
+$this->setSaveHandler($handler);
+}
+public function getSaveHandler()
+{
+return $this->saveHandler;
+}
+public function start()
+{
+if ($this->started) {
+return true;
+}
+if (\PHP_SESSION_ACTIVE === session_status()) {
+throw new \RuntimeException('Failed to start the session: already started by PHP.');
+}
+if (ini_get('session.use_cookies') && headers_sent($file, $line)) {
+throw new \RuntimeException(sprintf('Failed to start the session because headers have already been sent by "%s" at line %d.', $file, $line));
+}
+if (!session_start()) {
+throw new \RuntimeException('Failed to start the session');
+}
+$this->loadSession();
+return true;
+}
+public function getId()
+{
+return $this->saveHandler->getId();
+}
+public function setId($id)
+{
+$this->saveHandler->setId($id);
+}
+public function getName()
+{
+return $this->saveHandler->getName();
+}
+public function setName($name)
+{
+$this->saveHandler->setName($name);
+}
+public function regenerate($destroy = false, $lifetime = null)
+{
+if (\PHP_SESSION_ACTIVE !== session_status()) {
+return false;
+}
+if (null !== $lifetime) {
+ini_set('session.cookie_lifetime', $lifetime);
+}
+if ($destroy) {
+$this->metadataBag->stampNew();
+}
+$isRegenerated = session_regenerate_id($destroy);
+$this->loadSession();
+return $isRegenerated;
+}
+public function save()
+{
+session_write_close();
+$this->closed = true;
+$this->started = false;
+}
+public function clear()
+{
+foreach ($this->bags as $bag) {
+$bag->clear();
+}
+$_SESSION = array();
+$this->loadSession();
+}
+public function registerBag(SessionBagInterface $bag)
+{
+if ($this->started) {
+throw new \LogicException('Cannot register a bag when the session is already started.');
+}
+$this->bags[$bag->getName()] = $bag;
+}
+public function getBag($name)
+{
+if (!isset($this->bags[$name])) {
+throw new \InvalidArgumentException(sprintf('The SessionBagInterface %s is not registered.', $name));
+}
+if ($this->saveHandler->isActive() && !$this->started) {
+$this->loadSession();
+} elseif (!$this->started) {
+$this->start();
+}
+return $this->bags[$name];
+}
+public function setMetadataBag(MetadataBag $metaBag = null)
+{
+if (null === $metaBag) {
+$metaBag = new MetadataBag();
+}
+$this->metadataBag = $metaBag;
+}
+public function getMetadataBag()
+{
+return $this->metadataBag;
+}
+public function isStarted()
+{
+return $this->started;
 }
 public function setOptions(array $options)
 {
-$this->options = array('cache_dir'=> null,'debug'=> false,'generator_class'=>'Symfony\\Component\\Routing\\Generator\\UrlGenerator','generator_base_class'=>'Symfony\\Component\\Routing\\Generator\\UrlGenerator','generator_dumper_class'=>'Symfony\\Component\\Routing\\Generator\\Dumper\\PhpGeneratorDumper','generator_cache_class'=>'ProjectUrlGenerator','matcher_class'=>'Symfony\\Component\\Routing\\Matcher\\UrlMatcher','matcher_base_class'=>'Symfony\\Component\\Routing\\Matcher\\UrlMatcher','matcher_dumper_class'=>'Symfony\\Component\\Routing\\Matcher\\Dumper\\PhpMatcherDumper','matcher_cache_class'=>'ProjectUrlMatcher','resource_type'=> null,'strict_requirements'=> true,
-);
-$invalid = array();
+$validOptions = array_flip(array('cache_limiter','cookie_domain','cookie_httponly','cookie_lifetime','cookie_path','cookie_secure','entropy_file','entropy_length','gc_divisor','gc_maxlifetime','gc_probability','hash_bits_per_character','hash_function','name','referer_check','serialize_handler','use_cookies','use_only_cookies','use_trans_sid','upload_progress.enabled','upload_progress.cleanup','upload_progress.prefix','upload_progress.name','upload_progress.freq','upload_progress.min-freq','url_rewriter.tags',
+));
 foreach ($options as $key => $value) {
-if (array_key_exists($key, $this->options)) {
-$this->options[$key] = $value;
-} else {
-$invalid[] = $key;
+if (isset($validOptions[$key])) {
+ini_set('session.'.$key, $value);
 }
 }
-if ($invalid) {
-throw new \InvalidArgumentException(sprintf('The Router does not support the following options: "%s".', implode('", "', $invalid)));
 }
-}
-public function setOption($key, $value)
+public function setSaveHandler($saveHandler = null)
 {
-if (!array_key_exists($key, $this->options)) {
-throw new \InvalidArgumentException(sprintf('The Router does not support the "%s" option.', $key));
+if (!$saveHandler instanceof AbstractProxy &&
+!$saveHandler instanceof NativeSessionHandler &&
+!$saveHandler instanceof \SessionHandlerInterface &&
+null !== $saveHandler) {
+throw new \InvalidArgumentException('Must be instance of AbstractProxy or NativeSessionHandler; implement \SessionHandlerInterface; or be null.');
 }
-$this->options[$key] = $value;
+if (!$saveHandler instanceof AbstractProxy && $saveHandler instanceof \SessionHandlerInterface) {
+$saveHandler = new SessionHandlerProxy($saveHandler);
+} elseif (!$saveHandler instanceof AbstractProxy) {
+$saveHandler = new SessionHandlerProxy(new \SessionHandler());
 }
-public function getOption($key)
+$this->saveHandler = $saveHandler;
+if ($this->saveHandler instanceof \SessionHandlerInterface) {
+session_set_save_handler($this->saveHandler, false);
+}
+}
+protected function loadSession(array &$session = null)
 {
-if (!array_key_exists($key, $this->options)) {
-throw new \InvalidArgumentException(sprintf('The Router does not support the "%s" option.', $key));
+if (null === $session) {
+$session = &$_SESSION;
 }
-return $this->options[$key];
+$bags = array_merge($this->bags, array($this->metadataBag));
+foreach ($bags as $bag) {
+$key = $bag->getStorageKey();
+$session[$key] = isset($session[$key]) ? $session[$key] : array();
+$bag->initialize($session[$key]);
 }
-public function getRouteCollection()
+$this->started = true;
+$this->closed = false;
+}
+}
+}
+namespace Symfony\Component\HttpFoundation\Session\Storage
 {
-if (null === $this->collection) {
-$this->collection = $this->loader->load($this->resource, $this->options['resource_type']);
-}
-return $this->collection;
-}
-public function setContext(RequestContext $context)
+use Symfony\Component\HttpFoundation\Session\Storage\Proxy\AbstractProxy;
+use Symfony\Component\HttpFoundation\Session\Storage\Handler\NativeSessionHandler;
+class PhpBridgeSessionStorage extends NativeSessionStorage
 {
-$this->context = $context;
-if (null !== $this->matcher) {
-$this->getMatcher()->setContext($context);
-}
-if (null !== $this->generator) {
-$this->getGenerator()->setContext($context);
-}
-}
-public function getContext()
+public function __construct($handler = null, MetadataBag $metaBag = null)
 {
-return $this->context;
+$this->setMetadataBag($metaBag);
+$this->setSaveHandler($handler);
 }
-public function setConfigCacheFactory(ConfigCacheFactoryInterface $configCacheFactory)
+public function start()
 {
-$this->configCacheFactory = $configCacheFactory;
+if ($this->started) {
+return true;
 }
-public function generate($name, $parameters = array(), $referenceType = self::ABSOLUTE_PATH)
+$this->loadSession();
+return true;
+}
+public function clear()
 {
-return $this->getGenerator()->generate($name, $parameters, $referenceType);
+foreach ($this->bags as $bag) {
+$bag->clear();
 }
-public function match($pathinfo)
+$this->loadSession();
+}
+}
+}
+namespace Symfony\Component\HttpFoundation\Session\Storage\Handler
 {
-return $this->getMatcher()->match($pathinfo);
-}
-public function matchRequest(Request $request)
+class NativeSessionHandler extends \SessionHandler
 {
-$matcher = $this->getMatcher();
-if (!$matcher instanceof RequestMatcherInterface) {
-return $matcher->match($request->getPathInfo());
 }
-return $matcher->matchRequest($request);
 }
-public function getMatcher()
+namespace Symfony\Component\HttpFoundation\Session\Storage\Handler
 {
-if (null !== $this->matcher) {
-return $this->matcher;
-}
-if (null === $this->options['cache_dir'] || null === $this->options['matcher_cache_class']) {
-$this->matcher = new $this->options['matcher_class']($this->getRouteCollection(), $this->context);
-if (method_exists($this->matcher,'addExpressionLanguageProvider')) {
-foreach ($this->expressionLanguageProviders as $provider) {
-$this->matcher->addExpressionLanguageProvider($provider);
-}
-}
-return $this->matcher;
-}
-$cache = $this->getConfigCacheFactory()->cache($this->options['cache_dir'].'/'.$this->options['matcher_cache_class'].'.php',
-function (ConfigCacheInterface $cache) {
-$dumper = $this->getMatcherDumperInstance();
-if (method_exists($dumper,'addExpressionLanguageProvider')) {
-foreach ($this->expressionLanguageProviders as $provider) {
-$dumper->addExpressionLanguageProvider($provider);
-}
-}
-$options = array('class'=> $this->options['matcher_cache_class'],'base_class'=> $this->options['matcher_base_class'],
-);
-$cache->write($dumper->dump($options), $this->getRouteCollection()->getResources());
-}
-);
-require_once $cache->getPath();
-return $this->matcher = new $this->options['matcher_cache_class']($this->context);
-}
-public function getGenerator()
+class NativeFileSessionHandler extends NativeSessionHandler
 {
-if (null !== $this->generator) {
-return $this->generator;
-}
-if (null === $this->options['cache_dir'] || null === $this->options['generator_cache_class']) {
-$this->generator = new $this->options['generator_class']($this->getRouteCollection(), $this->context, $this->logger);
-} else {
-$cache = $this->getConfigCacheFactory()->cache($this->options['cache_dir'].'/'.$this->options['generator_cache_class'].'.php',
-function (ConfigCacheInterface $cache) {
-$dumper = $this->getGeneratorDumperInstance();
-$options = array('class'=> $this->options['generator_cache_class'],'base_class'=> $this->options['generator_base_class'],
-);
-$cache->write($dumper->dump($options), $this->getRouteCollection()->getResources());
-}
-);
-require_once $cache->getPath();
-$this->generator = new $this->options['generator_cache_class']($this->context, $this->logger);
-}
-if ($this->generator instanceof ConfigurableRequirementsInterface) {
-$this->generator->setStrictRequirements($this->options['strict_requirements']);
-}
-return $this->generator;
-}
-public function addExpressionLanguageProvider(ExpressionFunctionProviderInterface $provider)
+public function __construct($savePath = null)
 {
-$this->expressionLanguageProviders[] = $provider;
+if (null === $savePath) {
+$savePath = ini_get('session.save_path');
 }
-protected function getGeneratorDumperInstance()
+$baseDir = $savePath;
+if ($count = substr_count($savePath,';')) {
+if ($count > 2) {
+throw new \InvalidArgumentException(sprintf('Invalid argument $savePath \'%s\'', $savePath));
+}
+$baseDir = ltrim(strrchr($savePath,';'),';');
+}
+if ($baseDir && !is_dir($baseDir) && !@mkdir($baseDir, 0777, true) && !is_dir($baseDir)) {
+throw new \RuntimeException(sprintf('Session Storage was not able to create directory "%s"', $baseDir));
+}
+ini_set('session.save_path', $savePath);
+ini_set('session.save_handler','files');
+}
+}
+}
+namespace Symfony\Component\HttpFoundation\Session\Storage\Proxy
 {
-return new $this->options['generator_dumper_class']($this->getRouteCollection());
-}
-protected function getMatcherDumperInstance()
+abstract class AbstractProxy
 {
-return new $this->options['matcher_dumper_class']($this->getRouteCollection());
-}
-private function getConfigCacheFactory()
+protected $wrapper = false;
+protected $saveHandlerName;
+public function getSaveHandlerName()
 {
-if (null === $this->configCacheFactory) {
-$this->configCacheFactory = new ConfigCacheFactory($this->options['debug']);
+return $this->saveHandlerName;
 }
-return $this->configCacheFactory;
-}
-}
-}
-namespace Symfony\Bundle\FrameworkBundle\Routing
+public function isSessionHandlerInterface()
 {
-use Symfony\Component\Routing\Router as BaseRouter;
-use Symfony\Component\Routing\RequestContext;
-use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\Routing\RouteCollection;
-use Symfony\Component\HttpKernel\CacheWarmer\WarmableInterface;
-use Symfony\Component\DependencyInjection\Exception\ParameterNotFoundException;
-use Symfony\Component\DependencyInjection\Exception\RuntimeException;
-class Router extends BaseRouter implements WarmableInterface
+return $this instanceof \SessionHandlerInterface;
+}
+public function isWrapper()
 {
-private $container;
-public function __construct(ContainerInterface $container, $resource, array $options = array(), RequestContext $context = null)
+return $this->wrapper;
+}
+public function isActive()
 {
-$this->container = $container;
-$this->resource = $resource;
-$this->context = $context ?: new RequestContext();
-$this->setOptions($options);
+return \PHP_SESSION_ACTIVE === session_status();
 }
-public function getRouteCollection()
+public function getId()
 {
-if (null === $this->collection) {
-$this->collection = $this->container->get('routing.loader')->load($this->resource, $this->options['resource_type']);
-$this->resolveParameters($this->collection);
+return session_id();
 }
-return $this->collection;
-}
-public function warmUp($cacheDir)
+public function setId($id)
 {
-$currentDir = $this->getOption('cache_dir');
-$this->setOption('cache_dir', $cacheDir);
-$this->getMatcher();
-$this->getGenerator();
-$this->setOption('cache_dir', $currentDir);
+if ($this->isActive()) {
+throw new \LogicException('Cannot change the ID of an active session');
 }
-private function resolveParameters(RouteCollection $collection)
+session_id($id);
+}
+public function getName()
 {
-foreach ($collection as $route) {
-foreach ($route->getDefaults() as $name => $value) {
-$route->setDefault($name, $this->resolve($value));
+return session_name();
 }
-foreach ($route->getRequirements() as $name => $value) {
-$route->setRequirement($name, $this->resolve($value));
-}
-$route->setPath($this->resolve($route->getPath()));
-$route->setHost($this->resolve($route->getHost()));
-$schemes = array();
-foreach ($route->getSchemes() as $scheme) {
-$schemes = array_merge($schemes, explode('|', $this->resolve($scheme)));
-}
-$route->setSchemes($schemes);
-$methods = array();
-foreach ($route->getMethods() as $method) {
-$methods = array_merge($methods, explode('|', $this->resolve($method)));
-}
-$route->setMethods($methods);
-$route->setCondition($this->resolve($route->getCondition()));
-}
-}
-private function resolve($value)
+public function setName($name)
 {
-if (is_array($value)) {
-foreach ($value as $key => $val) {
-$value[$key] = $this->resolve($val);
+if ($this->isActive()) {
+throw new \LogicException('Cannot change the name of an active session');
 }
-return $value;
+session_name($name);
 }
-if (!is_string($value)) {
-return $value;
 }
-$container = $this->container;
-$escapedValue = preg_replace_callback('/%%|%([^%\s]++)%/', function ($match) use ($container, $value) {
-if (!isset($match[1])) {
-return'%%';
 }
-if (preg_match('/^env\(\w+\)$/', $match[1])) {
-throw new RuntimeException(sprintf('Using "%%%s%%" is not allowed in routing configuration.', $match[1]));
+namespace Symfony\Component\HttpFoundation\Session\Storage\Proxy
+{
+class SessionHandlerProxy extends AbstractProxy implements \SessionHandlerInterface
+{
+protected $handler;
+public function __construct(\SessionHandlerInterface $handler)
+{
+$this->handler = $handler;
+$this->wrapper = ($handler instanceof \SessionHandler);
+$this->saveHandlerName = $this->wrapper ? ini_get('session.save_handler') :'user';
 }
-$resolved = $container->getParameter($match[1]);
-if (is_string($resolved) || is_numeric($resolved)) {
-return (string) $resolved;
+public function open($savePath, $sessionName)
+{
+return (bool) $this->handler->open($savePath, $sessionName);
 }
-throw new RuntimeException(sprintf('The container parameter "%s", used in the route configuration value "%s", '.'must be a string or numeric, but it is of type %s.',
-$match[1],
-$value,
-gettype($resolved)
-)
-);
-}, $value);
-return str_replace('%%','%', $escapedValue);
+public function close()
+{
+return (bool) $this->handler->close();
+}
+public function read($sessionId)
+{
+return (string) $this->handler->read($sessionId);
+}
+public function write($sessionId, $data)
+{
+return (bool) $this->handler->write($sessionId, $data);
+}
+public function destroy($sessionId)
+{
+return (bool) $this->handler->destroy($sessionId);
+}
+public function gc($maxlifetime)
+{
+return (bool) $this->handler->gc($maxlifetime);
+}
+}
+}
+namespace Symfony\Component\HttpFoundation\Session
+{
+use Symfony\Component\HttpFoundation\Session\Storage\MetadataBag;
+interface SessionInterface
+{
+public function start();
+public function getId();
+public function setId($id);
+public function getName();
+public function setName($name);
+public function invalidate($lifetime = null);
+public function migrate($destroy = false, $lifetime = null);
+public function save();
+public function has($name);
+public function get($name, $default = null);
+public function set($name, $value);
+public function all();
+public function replace(array $attributes);
+public function remove($name);
+public function clear();
+public function isStarted();
+public function registerBag(SessionBagInterface $bag);
+public function getBag($name);
+public function getMetadataBag();
+}
+}
+namespace Symfony\Component\HttpFoundation\Session
+{
+use Symfony\Component\HttpFoundation\Session\Storage\SessionStorageInterface;
+use Symfony\Component\HttpFoundation\Session\Attribute\AttributeBag;
+use Symfony\Component\HttpFoundation\Session\Attribute\AttributeBagInterface;
+use Symfony\Component\HttpFoundation\Session\Flash\FlashBag;
+use Symfony\Component\HttpFoundation\Session\Flash\FlashBagInterface;
+use Symfony\Component\HttpFoundation\Session\Storage\NativeSessionStorage;
+class Session implements SessionInterface, \IteratorAggregate, \Countable
+{
+protected $storage;
+private $flashName;
+private $attributeName;
+public function __construct(SessionStorageInterface $storage = null, AttributeBagInterface $attributes = null, FlashBagInterface $flashes = null)
+{
+$this->storage = $storage ?: new NativeSessionStorage();
+$attributes = $attributes ?: new AttributeBag();
+$this->attributeName = $attributes->getName();
+$this->registerBag($attributes);
+$flashes = $flashes ?: new FlashBag();
+$this->flashName = $flashes->getName();
+$this->registerBag($flashes);
+}
+public function start()
+{
+return $this->storage->start();
+}
+public function has($name)
+{
+return $this->storage->getBag($this->attributeName)->has($name);
+}
+public function get($name, $default = null)
+{
+return $this->storage->getBag($this->attributeName)->get($name, $default);
+}
+public function set($name, $value)
+{
+$this->storage->getBag($this->attributeName)->set($name, $value);
+}
+public function all()
+{
+return $this->storage->getBag($this->attributeName)->all();
+}
+public function replace(array $attributes)
+{
+$this->storage->getBag($this->attributeName)->replace($attributes);
+}
+public function remove($name)
+{
+return $this->storage->getBag($this->attributeName)->remove($name);
+}
+public function clear()
+{
+$this->storage->getBag($this->attributeName)->clear();
+}
+public function isStarted()
+{
+return $this->storage->isStarted();
+}
+public function getIterator()
+{
+return new \ArrayIterator($this->storage->getBag($this->attributeName)->all());
+}
+public function count()
+{
+return count($this->storage->getBag($this->attributeName)->all());
+}
+public function invalidate($lifetime = null)
+{
+$this->storage->clear();
+return $this->migrate(true, $lifetime);
+}
+public function migrate($destroy = false, $lifetime = null)
+{
+return $this->storage->regenerate($destroy, $lifetime);
+}
+public function save()
+{
+$this->storage->save();
+}
+public function getId()
+{
+return $this->storage->getId();
+}
+public function setId($id)
+{
+$this->storage->setId($id);
+}
+public function getName()
+{
+return $this->storage->getName();
+}
+public function setName($name)
+{
+$this->storage->setName($name);
+}
+public function getMetadataBag()
+{
+return $this->storage->getMetadataBag();
+}
+public function registerBag(SessionBagInterface $bag)
+{
+$this->storage->registerBag($bag);
+}
+public function getBag($name)
+{
+return $this->storage->getBag($name);
+}
+public function getFlashBag()
+{
+return $this->getBag($this->flashName);
 }
 }
 }
@@ -3419,121 +565,6 @@ return $this->container->getParameter('kernel.environment');
 public function getDebug()
 {
 return (bool) $this->container->getParameter('kernel.debug');
-}
-}
-}
-namespace Symfony\Component\Config
-{
-use Symfony\Component\Config\Exception\FileLocatorFileNotFoundException;
-interface FileLocatorInterface
-{
-public function locate($name, $currentPath = null, $first = true);
-}
-}
-namespace Symfony\Bundle\FrameworkBundle\Templating\Loader
-{
-use Symfony\Component\Config\FileLocatorInterface;
-use Symfony\Component\Templating\TemplateReferenceInterface;
-class TemplateLocator implements FileLocatorInterface
-{
-protected $locator;
-protected $cache;
-public function __construct(FileLocatorInterface $locator, $cacheDir = null)
-{
-if (null !== $cacheDir && file_exists($cache = $cacheDir.'/templates.php')) {
-$this->cache = require $cache;
-}
-$this->locator = $locator;
-}
-protected function getCacheKey($template)
-{
-return $template->getLogicalName();
-}
-public function locate($template, $currentPath = null, $first = true)
-{
-if (!$template instanceof TemplateReferenceInterface) {
-throw new \InvalidArgumentException('The template must be an instance of TemplateReferenceInterface.');
-}
-$key = $this->getCacheKey($template);
-if (isset($this->cache[$key])) {
-return $this->cache[$key];
-}
-try {
-return $this->cache[$key] = $this->locator->locate($template->getPath(), $currentPath);
-} catch (\InvalidArgumentException $e) {
-throw new \InvalidArgumentException(sprintf('Unable to find template "%s" : "%s".', $template, $e->getMessage()), 0, $e);
-}
-}
-}
-}
-namespace Symfony\Component\Templating
-{
-interface TemplateNameParserInterface
-{
-public function parse($name);
-}
-}
-namespace Symfony\Component\Templating
-{
-class TemplateNameParser implements TemplateNameParserInterface
-{
-public function parse($name)
-{
-if ($name instanceof TemplateReferenceInterface) {
-return $name;
-}
-$engine = null;
-if (false !== $pos = strrpos($name,'.')) {
-$engine = substr($name, $pos + 1);
-}
-return new TemplateReference($name, $engine);
-}
-}
-}
-namespace Symfony\Bundle\FrameworkBundle\Templating
-{
-use Symfony\Component\Templating\TemplateReferenceInterface;
-use Symfony\Component\HttpKernel\KernelInterface;
-use Symfony\Component\Templating\TemplateNameParser as BaseTemplateNameParser;
-class TemplateNameParser extends BaseTemplateNameParser
-{
-protected $kernel;
-protected $cache = array();
-public function __construct(KernelInterface $kernel)
-{
-$this->kernel = $kernel;
-}
-public function parse($name)
-{
-if ($name instanceof TemplateReferenceInterface) {
-return $name;
-} elseif (isset($this->cache[$name])) {
-return $this->cache[$name];
-}
-$name = str_replace(':/',':', preg_replace('#/{2,}#','/', str_replace('\\','/', $name)));
-if (false !== strpos($name,'..')) {
-throw new \RuntimeException(sprintf('Template name "%s" contains invalid characters.', $name));
-}
-if ($this->isAbsolutePath($name) || !preg_match('/^(?:([^:]*):([^:]*):)?(.+)\.([^\.]+)\.([^\.]+)$/', $name, $matches) || 0 === strpos($name,'@')) {
-return parent::parse($name);
-}
-$template = new TemplateReference($matches[1], $matches[2], $matches[3], $matches[4], $matches[5]);
-if ($template->get('bundle')) {
-try {
-$this->kernel->getBundle($template->get('bundle'));
-} catch (\Exception $e) {
-throw new \InvalidArgumentException(sprintf('Template name "%s" is not valid.', $name), 0, $e);
-}
-}
-return $this->cache[$name] = $template;
-}
-private function isAbsolutePath($file)
-{
-$isAbsolute = (bool) preg_match('#^(?:/|[a-zA-Z]:)#', $file);
-if ($isAbsolute) {
-@trigger_error('Absolute template path support is deprecated since Symfony 3.1 and will be removed in 4.0.', E_USER_DEPRECATED);
-}
-return $isAbsolute;
 }
 }
 }
@@ -3615,167 +646,130 @@ return sprintf('%s:%s:%s.%s.%s', $this->parameters['bundle'], $this->parameters[
 }
 }
 }
-namespace Symfony\Bundle\SecurityBundle\Security
+namespace Symfony\Component\Templating
 {
-final class FirewallConfig
+interface TemplateNameParserInterface
 {
-private $name;
-private $userChecker;
-private $requestMatcher;
-private $securityEnabled;
-private $stateless;
-private $provider;
-private $context;
-private $entryPoint;
-private $accessDeniedHandler;
-private $accessDeniedUrl;
-private $listeners;
-public function __construct($name, $userChecker, $requestMatcher = null, $securityEnabled = true, $stateless = false, $provider = null, $context = null, $entryPoint = null, $accessDeniedHandler = null, $accessDeniedUrl = null, $listeners = array())
+public function parse($name);
+}
+}
+namespace Symfony\Component\Templating
 {
-$this->name = $name;
-$this->userChecker = $userChecker;
-$this->requestMatcher = $requestMatcher;
-$this->securityEnabled = $securityEnabled;
-$this->stateless = $stateless;
-$this->provider = $provider;
-$this->context = $context;
-$this->entryPoint = $entryPoint;
-$this->accessDeniedHandler = $accessDeniedHandler;
-$this->accessDeniedUrl = $accessDeniedUrl;
-$this->listeners = $listeners;
-}
-public function getName()
+class TemplateNameParser implements TemplateNameParserInterface
 {
-return $this->name;
-}
-public function getRequestMatcher()
+public function parse($name)
 {
-return $this->requestMatcher;
+if ($name instanceof TemplateReferenceInterface) {
+return $name;
 }
-public function isSecurityEnabled()
+$engine = null;
+if (false !== $pos = strrpos($name,'.')) {
+$engine = substr($name, $pos + 1);
+}
+return new TemplateReference($name, $engine);
+}
+}
+}
+namespace Symfony\Bundle\FrameworkBundle\Templating
 {
-return $this->securityEnabled;
-}
-public function allowsAnonymous()
+use Symfony\Component\Templating\TemplateReferenceInterface;
+use Symfony\Component\HttpKernel\KernelInterface;
+use Symfony\Component\Templating\TemplateNameParser as BaseTemplateNameParser;
+class TemplateNameParser extends BaseTemplateNameParser
 {
-return in_array('anonymous', $this->listeners, true);
-}
-public function isStateless()
+protected $kernel;
+protected $cache = array();
+public function __construct(KernelInterface $kernel)
 {
-return $this->stateless;
+$this->kernel = $kernel;
 }
-public function getProvider()
+public function parse($name)
 {
-return $this->provider;
+if ($name instanceof TemplateReferenceInterface) {
+return $name;
+} elseif (isset($this->cache[$name])) {
+return $this->cache[$name];
 }
-public function getContext()
+$name = str_replace(':/',':', preg_replace('#/{2,}#','/', str_replace('\\','/', $name)));
+if (false !== strpos($name,'..')) {
+throw new \RuntimeException(sprintf('Template name "%s" contains invalid characters.', $name));
+}
+if ($this->isAbsolutePath($name) || !preg_match('/^(?:([^:]*):([^:]*):)?(.+)\.([^\.]+)\.([^\.]+)$/', $name, $matches) || 0 === strpos($name,'@')) {
+return parent::parse($name);
+}
+$template = new TemplateReference($matches[1], $matches[2], $matches[3], $matches[4], $matches[5]);
+if ($template->get('bundle')) {
+try {
+$this->kernel->getBundle($template->get('bundle'));
+} catch (\Exception $e) {
+throw new \InvalidArgumentException(sprintf('Template name "%s" is not valid.', $name), 0, $e);
+}
+}
+return $this->cache[$name] = $template;
+}
+private function isAbsolutePath($file)
 {
-return $this->context;
+$isAbsolute = (bool) preg_match('#^(?:/|[a-zA-Z]:)#', $file);
+if ($isAbsolute) {
+@trigger_error('Absolute template path support is deprecated since Symfony 3.1 and will be removed in 4.0.', E_USER_DEPRECATED);
 }
-public function getEntryPoint()
+return $isAbsolute;
+}
+}
+}
+namespace Symfony\Component\Config
 {
-return $this->entryPoint;
-}
-public function getUserChecker()
+interface FileLocatorInterface
 {
-return $this->userChecker;
+public function locate($name, $currentPath = null, $first = true);
 }
-public function getAccessDeniedHandler()
+}
+namespace Symfony\Bundle\FrameworkBundle\Templating\Loader
 {
-return $this->accessDeniedHandler;
-}
-public function getAccessDeniedUrl()
+use Symfony\Component\Config\FileLocatorInterface;
+use Symfony\Component\Templating\TemplateReferenceInterface;
+class TemplateLocator implements FileLocatorInterface
 {
-return $this->accessDeniedUrl;
-}
-public function getListeners()
+protected $locator;
+protected $cache;
+public function __construct(FileLocatorInterface $locator, $cacheDir = null)
 {
-return $this->listeners;
+if (null !== $cacheDir && is_file($cache = $cacheDir.'/templates.php')) {
+$this->cache = require $cache;
 }
+$this->locator = $locator;
 }
-}
-namespace Symfony\Bundle\SecurityBundle\Security
+protected function getCacheKey($template)
 {
-use Symfony\Component\Security\Http\Firewall\ExceptionListener;
-class FirewallContext
+return $template->getLogicalName();
+}
+public function locate($template, $currentPath = null, $first = true)
 {
-private $listeners;
-private $exceptionListener;
-private $config;
-public function __construct(array $listeners, ExceptionListener $exceptionListener = null, FirewallConfig $config = null)
+if (!$template instanceof TemplateReferenceInterface) {
+throw new \InvalidArgumentException('The template must be an instance of TemplateReferenceInterface.');
+}
+$key = $this->getCacheKey($template);
+if (isset($this->cache[$key])) {
+return $this->cache[$key];
+}
+try {
+return $this->cache[$key] = $this->locator->locate($template->getPath(), $currentPath);
+} catch (\InvalidArgumentException $e) {
+throw new \InvalidArgumentException(sprintf('Unable to find template "%s" : "%s".', $template, $e->getMessage()), 0, $e);
+}
+}
+}
+}
+namespace Psr\Cache
 {
-$this->listeners = $listeners;
-$this->exceptionListener = $exceptionListener;
-$this->config = $config;
-}
-public function getConfig()
+interface CacheItemInterface
 {
-return $this->config;
-}
-public function getContext()
-{
-return array($this->listeners, $this->exceptionListener);
-}
-}
-}
-namespace Symfony\Component\Security\Http
-{
-use Symfony\Component\HttpFoundation\Request;
-interface FirewallMapInterface
-{
-public function getListeners(Request $request);
-}
-}
-namespace Symfony\Bundle\SecurityBundle\Security
-{
-use Symfony\Component\Security\Http\FirewallMapInterface;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\DependencyInjection\ContainerInterface;
-class FirewallMap implements FirewallMapInterface
-{
-protected $container;
-protected $map;
-private $contexts;
-public function __construct(ContainerInterface $container, array $map)
-{
-$this->container = $container;
-$this->map = $map;
-$this->contexts = new \SplObjectStorage();
-}
-public function getListeners(Request $request)
-{
-$context = $this->getFirewallContext($request);
-if (null === $context) {
-return array(array(), null);
-}
-return $context->getContext();
-}
-public function getFirewallConfig(Request $request)
-{
-$context = $this->getFirewallContext($request);
-if (null === $context) {
-return;
-}
-return $context->getConfig();
-}
-private function getFirewallContext(Request $request)
-{
-if ($this->contexts->contains($request)) {
-return $this->contexts[$request];
-}
-foreach ($this->map as $contextId => $requestMatcher) {
-if (null === $requestMatcher || $requestMatcher->matches($request)) {
-return $this->contexts[$request] = $this->container->get($contextId);
-}
-}
-}
-}
-}
-namespace Psr\Log
-{
-interface LoggerAwareInterface
-{
-public function setLogger(LoggerInterface $logger);
+public function getKey();
+public function get();
+public function isHit();
+public function set($value);
+public function expiresAt($expiration);
+public function expiresAfter($time);
 }
 }
 namespace Psr\Cache
@@ -3803,6 +797,13 @@ interface AdapterInterface extends CacheItemPoolInterface
 }
 namespace Psr\Log
 {
+interface LoggerAwareInterface
+{
+public function setLogger(LoggerInterface $logger);
+}
+}
+namespace Psr\Log
+{
 trait LoggerAwareTrait
 {
 protected $logger;
@@ -3819,23 +820,16 @@ use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Cache\CacheItem;
-use Symfony\Component\Cache\Exception\InvalidArgumentException;
 abstract class AbstractAdapter implements AdapterInterface, LoggerAwareInterface
 {
 use LoggerAwareTrait;
-private static $apcuSupported;
-private static $phpFilesSupported;
 private $namespace;
 private $deferred = array();
 private $createCacheItem;
 private $mergeByLifetime;
-protected $maxIdLength;
 protected function __construct($namespace ='', $defaultLifetime = 0)
 {
-$this->namespace =''=== $namespace ?'': $this->getId($namespace).':';
-if (null !== $this->maxIdLength && strlen($namespace) > $this->maxIdLength - 24) {
-throw new InvalidArgumentException(sprintf('Namespace must be %d chars max, %d given ("%s")', $this->maxIdLength - 24, strlen($namespace), $namespace));
-}
+$this->namespace =''=== $namespace ?'': $this->getId($namespace);
 $this->createCacheItem = \Closure::bind(
 function ($key, $value, $isHit) use ($defaultLifetime) {
 $item = new CacheItem();
@@ -3870,24 +864,11 @@ CacheItem::class
 }
 public static function createSystemCache($namespace, $defaultLifetime, $version, $directory, LoggerInterface $logger = null)
 {
-if (null === self::$apcuSupported) {
-self::$apcuSupported = ApcuAdapter::isSupported();
-}
-if (!self::$apcuSupported && null === self::$phpFilesSupported) {
-self::$phpFilesSupported = PhpFilesAdapter::isSupported();
-}
-if (self::$phpFilesSupported) {
-$opcache = new PhpFilesAdapter($namespace, $defaultLifetime, $directory);
-if (null !== $logger) {
-$opcache->setLogger($logger);
-}
-return $opcache;
-}
 $fs = new FilesystemAdapter($namespace, $defaultLifetime, $directory);
 if (null !== $logger) {
 $fs->setLogger($logger);
 }
-if (!self::$apcuSupported) {
+if (!ApcuAdapter::isSupported()) {
 return $fs;
 }
 $apcu = new ApcuAdapter($namespace, (int) $defaultLifetime / 5, $version);
@@ -4080,13 +1061,7 @@ ini_set('unserialize_callback_func', $unserializeCallbackHandler);
 private function getId($key)
 {
 CacheItem::validateKey($key);
-if (null === $this->maxIdLength) {
 return $this->namespace.$key;
-}
-if (strlen($id = $this->namespace.$key) > $this->maxIdLength) {
-$id = $this->namespace.substr_replace(base64_encode(hash('sha256', $key, true)),':', -22);
-}
-return $id;
 }
 private function generateItems($items, &$keys)
 {
@@ -4110,456 +1085,6 @@ throw new \DomainException('Class not found: '.$class);
 }
 }
 }
-namespace Symfony\Component\Cache\Adapter
-{
-use Symfony\Component\Cache\CacheItem;
-use Symfony\Component\Cache\Exception\CacheException;
-class ApcuAdapter extends AbstractAdapter
-{
-public static function isSupported()
-{
-return function_exists('apcu_fetch') && ini_get('apc.enabled') && !('cli'=== PHP_SAPI && !ini_get('apc.enable_cli'));
-}
-public function __construct($namespace ='', $defaultLifetime = 0, $version = null)
-{
-if (!static::isSupported()) {
-throw new CacheException('APCu is not enabled');
-}
-if ('cli'=== PHP_SAPI) {
-ini_set('apc.use_request_time', 0);
-}
-parent::__construct($namespace, $defaultLifetime);
-if (null !== $version) {
-CacheItem::validateKey($version);
-if (!apcu_exists($version.'@'.$namespace)) {
-$this->clear($namespace);
-apcu_add($version.'@'.$namespace, null);
-}
-}
-}
-protected function doFetch(array $ids)
-{
-try {
-return apcu_fetch($ids);
-} catch (\Error $e) {
-throw new \ErrorException($e->getMessage(), $e->getCode(), E_ERROR, $e->getFile(), $e->getLine());
-}
-}
-protected function doHave($id)
-{
-return apcu_exists($id);
-}
-protected function doClear($namespace)
-{
-return isset($namespace[0]) && class_exists('APCuIterator', false)
-? apcu_delete(new \APCuIterator(sprintf('/^%s/', preg_quote($namespace,'/')), APC_ITER_KEY))
-: apcu_clear_cache();
-}
-protected function doDelete(array $ids)
-{
-foreach ($ids as $id) {
-apcu_delete($id);
-}
-return true;
-}
-protected function doSave(array $values, $lifetime)
-{
-try {
-return array_keys(apcu_store($values, null, $lifetime));
-} catch (\Error $e) {
-} catch (\Exception $e) {
-}
-if (1 === count($values)) {
-apcu_delete(key($values));
-}
-throw $e;
-}
-}
-}
-namespace Symfony\Component\Cache\Adapter
-{
-use Symfony\Component\Cache\Exception\InvalidArgumentException;
-trait FilesystemAdapterTrait
-{
-private $directory;
-private $tmp;
-private function init($namespace, $directory)
-{
-if (!isset($directory[0])) {
-$directory = sys_get_temp_dir().'/symfony-cache';
-}
-if (isset($namespace[0])) {
-if (preg_match('#[^-+_.A-Za-z0-9]#', $namespace, $match)) {
-throw new InvalidArgumentException(sprintf('Namespace contains "%s" but only characters in [-+_.A-Za-z0-9] are allowed.', $match[0]));
-}
-$directory .='/'.$namespace;
-}
-if (!file_exists($dir = $directory.'/.')) {
-@mkdir($directory, 0777, true);
-}
-if (false === $dir = realpath($dir) ?: (file_exists($dir) ? $dir : false)) {
-throw new InvalidArgumentException(sprintf('Cache directory does not exist (%s)', $directory));
-}
-if (!is_writable($dir .= DIRECTORY_SEPARATOR)) {
-throw new InvalidArgumentException(sprintf('Cache directory is not writable (%s)', $directory));
-}
-if ('\\'=== DIRECTORY_SEPARATOR && strlen($dir) > 234) {
-throw new InvalidArgumentException(sprintf('Cache directory too long (%s)', $directory));
-}
-$this->directory = $dir;
-$this->tmp = $this->directory.uniqid('', true);
-}
-protected function doClear($namespace)
-{
-$ok = true;
-foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($this->directory, \FilesystemIterator::SKIP_DOTS)) as $file) {
-$ok = ($file->isDir() || @unlink($file) || !file_exists($file)) && $ok;
-}
-return $ok;
-}
-protected function doDelete(array $ids)
-{
-$ok = true;
-foreach ($ids as $id) {
-$file = $this->getFile($id);
-$ok = (!file_exists($file) || @unlink($file) || !file_exists($file)) && $ok;
-}
-return $ok;
-}
-private function write($file, $data, $expiresAt = null)
-{
-if (false === @file_put_contents($this->tmp, $data)) {
-return false;
-}
-if (null !== $expiresAt) {
-@touch($this->tmp, $expiresAt);
-}
-if (@rename($this->tmp, $file)) {
-return true;
-}
-@unlink($this->tmp);
-return false;
-}
-private function getFile($id, $mkdir = false)
-{
-$hash = str_replace('/','-', base64_encode(hash('sha256', static::class.$id, true)));
-$dir = $this->directory.strtoupper($hash[0].DIRECTORY_SEPARATOR.$hash[1].DIRECTORY_SEPARATOR);
-if ($mkdir && !file_exists($dir)) {
-@mkdir($dir, 0777, true);
-}
-return $dir.substr($hash, 2, 20);
-}
-}
-}
-namespace Symfony\Component\Cache\Adapter
-{
-class FilesystemAdapter extends AbstractAdapter
-{
-use FilesystemAdapterTrait;
-public function __construct($namespace ='', $defaultLifetime = 0, $directory = null)
-{
-parent::__construct('', $defaultLifetime);
-$this->init($namespace, $directory);
-}
-protected function doFetch(array $ids)
-{
-$values = array();
-$now = time();
-foreach ($ids as $id) {
-$file = $this->getFile($id);
-if (!file_exists($file) || !$h = @fopen($file,'rb')) {
-continue;
-}
-if ($now >= (int) $expiresAt = fgets($h)) {
-fclose($h);
-if (isset($expiresAt[0])) {
-@unlink($file);
-}
-} else {
-$i = rawurldecode(rtrim(fgets($h)));
-$value = stream_get_contents($h);
-fclose($h);
-if ($i === $id) {
-$values[$id] = parent::unserialize($value);
-}
-}
-}
-return $values;
-}
-protected function doHave($id)
-{
-$file = $this->getFile($id);
-return file_exists($file) && (@filemtime($file) > time() || $this->doFetch(array($id)));
-}
-protected function doSave(array $values, $lifetime)
-{
-$ok = true;
-$expiresAt = time() + ($lifetime ?: 31557600);
-foreach ($values as $id => $value) {
-$ok = $this->write($this->getFile($id, true), $expiresAt."\n".rawurlencode($id)."\n".serialize($value), $expiresAt) && $ok;
-}
-return $ok;
-}
-}
-}
-namespace Symfony\Component\Cache\Adapter
-{
-use Psr\Cache\CacheItemInterface;
-use Psr\Cache\CacheItemPoolInterface;
-use Symfony\Component\Cache\CacheItem;
-use Symfony\Component\Cache\Exception\InvalidArgumentException;
-class PhpArrayAdapter implements AdapterInterface
-{
-private $file;
-private $values;
-private $createCacheItem;
-private $fallbackPool;
-public function __construct($file, AdapterInterface $fallbackPool)
-{
-$this->file = $file;
-$this->fallbackPool = $fallbackPool;
-$this->createCacheItem = \Closure::bind(
-function ($key, $value, $isHit) {
-$item = new CacheItem();
-$item->key = $key;
-$item->value = $value;
-$item->isHit = $isHit;
-return $item;
-},
-null,
-CacheItem::class
-);
-}
-public static function create($file, CacheItemPoolInterface $fallbackPool)
-{
-if ((PHP_VERSION_ID >= 70000 && ini_get('opcache.enable')) || defined('HHVM_VERSION')) {
-if (!$fallbackPool instanceof AdapterInterface) {
-$fallbackPool = new ProxyAdapter($fallbackPool);
-}
-return new static($file, $fallbackPool);
-}
-return $fallbackPool;
-}
-public function warmUp(array $values)
-{
-if (file_exists($this->file)) {
-if (!is_file($this->file)) {
-throw new InvalidArgumentException(sprintf('Cache path exists and is not a file: %s.', $this->file));
-}
-if (!is_writable($this->file)) {
-throw new InvalidArgumentException(sprintf('Cache file is not writable: %s.', $this->file));
-}
-} else {
-$directory = dirname($this->file);
-if (!is_dir($directory) && !@mkdir($directory, 0777, true)) {
-throw new InvalidArgumentException(sprintf('Cache directory does not exist and cannot be created: %s.', $directory));
-}
-if (!is_writable($directory)) {
-throw new InvalidArgumentException(sprintf('Cache directory is not writable: %s.', $directory));
-}
-}
-$dump =<<<'EOF'
-<?php
-
-// This file has been auto-generated by the Symfony Cache Component.
-
-return array(
-
-
-EOF
-;
-foreach ($values as $key => $value) {
-CacheItem::validateKey(is_int($key) ? (string) $key : $key);
-if (null === $value || is_object($value)) {
-try {
-$value = serialize($value);
-} catch (\Exception $e) {
-throw new InvalidArgumentException(sprintf('Cache key "%s" has non-serializable %s value.', $key, get_class($value)), 0, $e);
-}
-} elseif (is_array($value)) {
-try {
-$serialized = serialize($value);
-$unserialized = unserialize($serialized);
-} catch (\Exception $e) {
-throw new InvalidArgumentException(sprintf('Cache key "%s" has non-serializable array value.', $key), 0, $e);
-}
-if ($unserialized !== $value || (false !== strpos($serialized,';R:') && preg_match('/;R:[1-9]/', $serialized))) {
-$value = $serialized;
-}
-} elseif (is_string($value)) {
-if ('N;'=== $value || (isset($value[2]) &&':'=== $value[1])) {
-$value = serialize($value);
-}
-} elseif (!is_scalar($value)) {
-throw new InvalidArgumentException(sprintf('Cache key "%s" has non-serializable %s value.', $key, gettype($value)));
-}
-$dump .= var_export($key, true).' => '.var_export($value, true).",\n";
-}
-$dump .="\n);\n";
-$dump = str_replace("' . \"\\0\" . '","\0", $dump);
-$tmpFile = uniqid($this->file, true);
-file_put_contents($tmpFile, $dump);
-@chmod($tmpFile, 0666);
-unset($serialized, $unserialized, $value, $dump);
-@rename($tmpFile, $this->file);
-$this->values = (include $this->file) ?: array();
-}
-public function getItem($key)
-{
-if (null === $this->values) {
-$this->initialize();
-}
-if (!is_string($key)) {
-throw new InvalidArgumentException(sprintf('Cache key must be string, "%s" given.', is_object($key) ? get_class($key) : gettype($key)));
-}
-if (!isset($this->values[$key])) {
-return $this->fallbackPool->getItem($key);
-}
-$value = $this->values[$key];
-$isHit = true;
-if ('N;'=== $value) {
-$value = null;
-} elseif (is_string($value) && isset($value[2]) &&':'=== $value[1]) {
-try {
-$e = null;
-$value = unserialize($value);
-} catch (\Error $e) {
-} catch (\Exception $e) {
-}
-if (null !== $e) {
-$value = null;
-$isHit = false;
-}
-}
-$f = $this->createCacheItem;
-return $f($key, $value, $isHit);
-}
-public function getItems(array $keys = array())
-{
-if (null === $this->values) {
-$this->initialize();
-}
-foreach ($keys as $key) {
-if (!is_string($key)) {
-throw new InvalidArgumentException(sprintf('Cache key must be string, "%s" given.', is_object($key) ? get_class($key) : gettype($key)));
-}
-}
-return $this->generateItems($keys);
-}
-public function hasItem($key)
-{
-if (null === $this->values) {
-$this->initialize();
-}
-if (!is_string($key)) {
-throw new InvalidArgumentException(sprintf('Cache key must be string, "%s" given.', is_object($key) ? get_class($key) : gettype($key)));
-}
-return isset($this->values[$key]) || $this->fallbackPool->hasItem($key);
-}
-public function clear()
-{
-$this->values = array();
-$cleared = @unlink($this->file) || !file_exists($this->file);
-return $this->fallbackPool->clear() && $cleared;
-}
-public function deleteItem($key)
-{
-if (null === $this->values) {
-$this->initialize();
-}
-if (!is_string($key)) {
-throw new InvalidArgumentException(sprintf('Cache key must be string, "%s" given.', is_object($key) ? get_class($key) : gettype($key)));
-}
-return !isset($this->values[$key]) && $this->fallbackPool->deleteItem($key);
-}
-public function deleteItems(array $keys)
-{
-if (null === $this->values) {
-$this->initialize();
-}
-$deleted = true;
-$fallbackKeys = array();
-foreach ($keys as $key) {
-if (!is_string($key)) {
-throw new InvalidArgumentException(sprintf('Cache key must be string, "%s" given.', is_object($key) ? get_class($key) : gettype($key)));
-}
-if (isset($this->values[$key])) {
-$deleted = false;
-} else {
-$fallbackKeys[] = $key;
-}
-}
-if ($fallbackKeys) {
-$deleted = $this->fallbackPool->deleteItems($fallbackKeys) && $deleted;
-}
-return $deleted;
-}
-public function save(CacheItemInterface $item)
-{
-if (null === $this->values) {
-$this->initialize();
-}
-return !isset($this->values[$item->getKey()]) && $this->fallbackPool->save($item);
-}
-public function saveDeferred(CacheItemInterface $item)
-{
-if (null === $this->values) {
-$this->initialize();
-}
-return !isset($this->values[$item->getKey()]) && $this->fallbackPool->saveDeferred($item);
-}
-public function commit()
-{
-return $this->fallbackPool->commit();
-}
-private function initialize()
-{
-$this->values = @(include $this->file) ?: array();
-}
-private function generateItems(array $keys)
-{
-$f = $this->createCacheItem;
-$fallbackKeys = array();
-foreach ($keys as $key) {
-if (isset($this->values[$key])) {
-$value = $this->values[$key];
-if ('N;'=== $value) {
-yield $key => $f($key, null, true);
-} elseif (is_string($value) && isset($value[2]) &&':'=== $value[1]) {
-try {
-yield $key => $f($key, unserialize($value), true);
-} catch (\Error $e) {
-yield $key => $f($key, null, false);
-} catch (\Exception $e) {
-yield $key => $f($key, null, false);
-}
-} else {
-yield $key => $f($key, $value, true);
-}
-} else {
-$fallbackKeys[] = $key;
-}
-}
-if ($fallbackKeys) {
-foreach ($this->fallbackPool->getItems($fallbackKeys) as $key => $item) {
-yield $key => $item;
-}
-}
-}
-}
-}
-namespace Psr\Cache
-{
-interface CacheItemInterface
-{
-public function getKey();
-public function get();
-public function isHit();
-public function set($value);
-public function expiresAt($expiration);
-public function expiresAfter($time);
-}
-}
 namespace Symfony\Component\Cache
 {
 use Psr\Cache\CacheItemInterface;
@@ -4572,7 +1097,6 @@ protected $value;
 protected $isHit;
 protected $expiry;
 protected $defaultLifetime;
-protected $tags = array();
 protected $innerItem;
 protected $poolHash;
 public function getKey()
@@ -4616,28 +1140,6 @@ throw new InvalidArgumentException(sprintf('Expiration date must be an integer, 
 }
 return $this;
 }
-public function tag($tags)
-{
-if (!is_array($tags)) {
-$tags = array($tags);
-}
-foreach ($tags as $tag) {
-if (!is_string($tag)) {
-throw new InvalidArgumentException(sprintf('Cache tag must be string, "%s" given', is_object($tag) ? get_class($tag) : gettype($tag)));
-}
-if (isset($this->tags[$tag])) {
-continue;
-}
-if (!isset($tag[0])) {
-throw new InvalidArgumentException('Cache tag length must be greater than zero');
-}
-if (isset($tag[strcspn($tag,'{}()/\@:')])) {
-throw new InvalidArgumentException(sprintf('Cache tag "%s" contains reserved characters {}()/\@:', $tag));
-}
-$this->tags[$tag] = $tag;
-}
-return $this;
-}
 public static function validateKey($key)
 {
 if (!is_string($key)) {
@@ -4666,339 +1168,826 @@ $replace['{'.$k.'}'] = $v;
 }
 }
 }
-namespace Doctrine\Common\Cache
+namespace Symfony\Component\Routing
 {
-interface MultiPutCache
+interface RequestContextAwareInterface
 {
-function saveMultiple(array $keysAndValues, $lifetime = 0);
+public function setContext(RequestContext $context);
+public function getContext();
 }
 }
-namespace Doctrine\Common\Cache
+namespace Symfony\Component\Routing\Generator
 {
-interface MultiGetCache
+use Symfony\Component\Routing\Exception\InvalidParameterException;
+use Symfony\Component\Routing\Exception\MissingMandatoryParametersException;
+use Symfony\Component\Routing\Exception\RouteNotFoundException;
+use Symfony\Component\Routing\RequestContextAwareInterface;
+interface UrlGeneratorInterface extends RequestContextAwareInterface
 {
-function fetchMultiple(array $keys);
+const ABSOLUTE_URL = 0;
+const ABSOLUTE_PATH = 1;
+const RELATIVE_PATH = 2;
+const NETWORK_PATH = 3;
+public function generate($name, $parameters = array(), $referenceType = self::ABSOLUTE_PATH);
 }
 }
-namespace Doctrine\Common\Cache
+namespace Symfony\Component\Routing\Generator
 {
-interface ClearableCache
+interface ConfigurableRequirementsInterface
 {
-public function deleteAll();
+public function setStrictRequirements($enabled);
+public function isStrictRequirements();
 }
 }
-namespace Doctrine\Common\Cache
+namespace Symfony\Component\Routing\Generator
 {
-interface FlushableCache
+use Symfony\Component\Routing\RouteCollection;
+use Symfony\Component\Routing\RequestContext;
+use Symfony\Component\Routing\Exception\InvalidParameterException;
+use Symfony\Component\Routing\Exception\RouteNotFoundException;
+use Symfony\Component\Routing\Exception\MissingMandatoryParametersException;
+use Psr\Log\LoggerInterface;
+class UrlGenerator implements UrlGeneratorInterface, ConfigurableRequirementsInterface
 {
-public function flushAll();
-}
-}
-namespace Doctrine\Common\Cache
+protected $routes;
+protected $context;
+protected $strictRequirements = true;
+protected $logger;
+protected $decodedChars = array('%2F'=>'/','%40'=>'@','%3A'=>':','%3B'=>';','%2C'=>',','%3D'=>'=','%2B'=>'+','%21'=>'!','%2A'=>'*','%7C'=>'|',
+);
+public function __construct(RouteCollection $routes, RequestContext $context, LoggerInterface $logger = null)
 {
-interface Cache
+$this->routes = $routes;
+$this->context = $context;
+$this->logger = $logger;
+}
+public function setContext(RequestContext $context)
 {
-const STATS_HITS ='hits';
-const STATS_MISSES ='misses';
-const STATS_UPTIME ='uptime';
-const STATS_MEMORY_USAGE ='memory_usage';
-const STATS_MEMORY_AVAILABLE ='memory_available';
-const STATS_MEMORY_AVAILIABLE ='memory_available';
-public function fetch($id);
-public function contains($id);
-public function save($id, $data, $lifeTime = 0);
-public function delete($id);
-public function getStats();
+$this->context = $context;
 }
-}
-namespace Doctrine\Common\Cache
+public function getContext()
 {
-abstract class CacheProvider implements Cache, FlushableCache, ClearableCache, MultiGetCache, MultiPutCache
+return $this->context;
+}
+public function setStrictRequirements($enabled)
 {
-const DOCTRINE_NAMESPACE_CACHEKEY ='DoctrineNamespaceCacheKey[%s]';
-private $namespace ='';
-private $namespaceVersion;
-public function setNamespace($namespace)
+$this->strictRequirements = null === $enabled ? null : (bool) $enabled;
+}
+public function isStrictRequirements()
 {
-$this->namespace = (string) $namespace;
-$this->namespaceVersion = null;
+return $this->strictRequirements;
 }
-public function getNamespace()
+public function generate($name, $parameters = array(), $referenceType = self::ABSOLUTE_PATH)
 {
-return $this->namespace;
+if (null === $route = $this->routes->get($name)) {
+throw new RouteNotFoundException(sprintf('Unable to generate a URL for the named route "%s" as such route does not exist.', $name));
 }
-public function fetch($id)
+$compiledRoute = $route->compile();
+return $this->doGenerate($compiledRoute->getVariables(), $route->getDefaults(), $route->getRequirements(), $compiledRoute->getTokens(), $parameters, $name, $referenceType, $compiledRoute->getHostTokens(), $route->getSchemes());
+}
+protected function doGenerate($variables, $defaults, $requirements, $tokens, $parameters, $name, $referenceType, $hostTokens, array $requiredSchemes = array())
 {
-return $this->doFetch($this->getNamespacedId($id));
+$variables = array_flip($variables);
+$mergedParams = array_replace($defaults, $this->context->getParameters(), $parameters);
+if ($diff = array_diff_key($variables, $mergedParams)) {
+throw new MissingMandatoryParametersException(sprintf('Some mandatory parameters are missing ("%s") to generate a URL for route "%s".', implode('", "', array_keys($diff)), $name));
 }
-public function fetchMultiple(array $keys)
-{
-if (empty($keys)) {
-return array();
+$url ='';
+$optional = true;
+$message ='Parameter "{parameter}" for route "{route}" must match "{expected}" ("{given}" given) to generate a corresponding URL.';
+foreach ($tokens as $token) {
+if ('variable'=== $token[0]) {
+if (!$optional || !array_key_exists($token[3], $defaults) || null !== $mergedParams[$token[3]] && (string) $mergedParams[$token[3]] !== (string) $defaults[$token[3]]) {
+if (null !== $this->strictRequirements && !preg_match('#^'.$token[2].'$#', $mergedParams[$token[3]])) {
+if ($this->strictRequirements) {
+throw new InvalidParameterException(strtr($message, array('{parameter}'=> $token[3],'{route}'=> $name,'{expected}'=> $token[2],'{given}'=> $mergedParams[$token[3]])));
 }
-$namespacedKeys = array_combine($keys, array_map(array($this,'getNamespacedId'), $keys));
-$items = $this->doFetchMultiple($namespacedKeys);
-$foundItems = array();
-foreach ($namespacedKeys as $requestedKey => $namespacedKey) {
-if (isset($items[$namespacedKey]) || array_key_exists($namespacedKey, $items)) {
-$foundItems[$requestedKey] = $items[$namespacedKey];
+if ($this->logger) {
+$this->logger->error($message, array('parameter'=> $token[3],'route'=> $name,'expected'=> $token[2],'given'=> $mergedParams[$token[3]]));
 }
+return;
 }
-return $foundItems;
+$url = $token[1].$mergedParams[$token[3]].$url;
+$optional = false;
 }
-public function saveMultiple(array $keysAndValues, $lifetime = 0)
-{
-$namespacedKeysAndValues = array();
-foreach ($keysAndValues as $key => $value) {
-$namespacedKeysAndValues[$this->getNamespacedId($key)] = $value;
-}
-return $this->doSaveMultiple($namespacedKeysAndValues, $lifetime);
-}
-public function contains($id)
-{
-return $this->doContains($this->getNamespacedId($id));
-}
-public function save($id, $data, $lifeTime = 0)
-{
-return $this->doSave($this->getNamespacedId($id), $data, $lifeTime);
-}
-public function delete($id)
-{
-return $this->doDelete($this->getNamespacedId($id));
-}
-public function getStats()
-{
-return $this->doGetStats();
-}
-public function flushAll()
-{
-return $this->doFlush();
-}
-public function deleteAll()
-{
-$namespaceCacheKey = $this->getNamespaceCacheKey();
-$namespaceVersion = $this->getNamespaceVersion() + 1;
-if ($this->doSave($namespaceCacheKey, $namespaceVersion)) {
-$this->namespaceVersion = $namespaceVersion;
-return true;
-}
-return false;
-}
-private function getNamespacedId($id)
-{
-$namespaceVersion = $this->getNamespaceVersion();
-return sprintf('%s[%s][%s]', $this->namespace, $id, $namespaceVersion);
-}
-private function getNamespaceCacheKey()
-{
-return sprintf(self::DOCTRINE_NAMESPACE_CACHEKEY, $this->namespace);
-}
-private function getNamespaceVersion()
-{
-if (null !== $this->namespaceVersion) {
-return $this->namespaceVersion;
-}
-$namespaceCacheKey = $this->getNamespaceCacheKey();
-$this->namespaceVersion = $this->doFetch($namespaceCacheKey) ?: 1;
-return $this->namespaceVersion;
-}
-protected function doFetchMultiple(array $keys)
-{
-$returnValues = array();
-foreach ($keys as $key) {
-if (false !== ($item = $this->doFetch($key)) || $this->doContains($key)) {
-$returnValues[$key] = $item;
+} else {
+$url = $token[1].$url;
+$optional = false;
 }
 }
-return $returnValues;
+if (''=== $url) {
+$url ='/';
 }
-abstract protected function doFetch($id);
-abstract protected function doContains($id);
-protected function doSaveMultiple(array $keysAndValues, $lifetime = 0)
-{
-$success = true;
-foreach ($keysAndValues as $key => $value) {
-if (!$this->doSave($key, $value, $lifetime)) {
-$success = false;
+$url = strtr(rawurlencode($url), $this->decodedChars);
+$url = strtr($url, array('/../'=>'/%2E%2E/','/./'=>'/%2E/'));
+if ('/..'=== substr($url, -3)) {
+$url = substr($url, 0, -2).'%2E%2E';
+} elseif ('/.'=== substr($url, -2)) {
+$url = substr($url, 0, -1).'%2E';
+}
+$schemeAuthority ='';
+if ($host = $this->context->getHost()) {
+$scheme = $this->context->getScheme();
+if ($requiredSchemes) {
+if (!in_array($scheme, $requiredSchemes, true)) {
+$referenceType = self::ABSOLUTE_URL;
+$scheme = current($requiredSchemes);
 }
 }
-return $success;
+if ($hostTokens) {
+$routeHost ='';
+foreach ($hostTokens as $token) {
+if ('variable'=== $token[0]) {
+if (null !== $this->strictRequirements && !preg_match('#^'.$token[2].'$#i', $mergedParams[$token[3]])) {
+if ($this->strictRequirements) {
+throw new InvalidParameterException(strtr($message, array('{parameter}'=> $token[3],'{route}'=> $name,'{expected}'=> $token[2],'{given}'=> $mergedParams[$token[3]])));
 }
-abstract protected function doSave($id, $data, $lifeTime = 0);
-abstract protected function doDelete($id);
-abstract protected function doFlush();
-abstract protected function doGetStats();
+if ($this->logger) {
+$this->logger->error($message, array('parameter'=> $token[3],'route'=> $name,'expected'=> $token[2],'given'=> $mergedParams[$token[3]]));
+}
+return;
+}
+$routeHost = $token[1].$mergedParams[$token[3]].$routeHost;
+} else {
+$routeHost = $token[1].$routeHost;
 }
 }
-namespace Symfony\Component\Cache
-{
-use Doctrine\Common\Cache\CacheProvider;
-use Psr\Cache\CacheItemPoolInterface;
-class DoctrineProvider extends CacheProvider
-{
-private $pool;
-public function __construct(CacheItemPoolInterface $pool)
-{
-$this->pool = $pool;
-}
-protected function doFetch($id)
-{
-$item = $this->pool->getItem(rawurlencode($id));
-return $item->isHit() ? $item->get() : false;
-}
-protected function doContains($id)
-{
-return $this->pool->hasItem(rawurlencode($id));
-}
-protected function doSave($id, $data, $lifeTime = 0)
-{
-$item = $this->pool->getItem(rawurlencode($id));
-if (0 < $lifeTime) {
-$item->expiresAfter($lifeTime);
-}
-return $this->pool->save($item->set($data));
-}
-protected function doDelete($id)
-{
-return $this->pool->deleteItem(rawurlencode($id));
-}
-protected function doFlush()
-{
-$this->pool->clear();
-}
-protected function doGetStats()
-{
+if ($routeHost !== $host) {
+$host = $routeHost;
+if (self::ABSOLUTE_URL !== $referenceType) {
+$referenceType = self::NETWORK_PATH;
 }
 }
 }
-namespace Symfony\Component\Config
-{
-use Symfony\Component\Config\Resource\ResourceInterface;
-interface ConfigCacheInterface
-{
-public function getPath();
-public function isFresh();
-public function write($content, array $metadata = null);
+if (self::ABSOLUTE_URL === $referenceType || self::NETWORK_PATH === $referenceType) {
+$port ='';
+if ('http'=== $scheme && 80 != $this->context->getHttpPort()) {
+$port =':'.$this->context->getHttpPort();
+} elseif ('https'=== $scheme && 443 != $this->context->getHttpsPort()) {
+$port =':'.$this->context->getHttpsPort();
+}
+$schemeAuthority = self::NETWORK_PATH === $referenceType ?'//': "$scheme://";
+$schemeAuthority .= $host.$port;
 }
 }
-namespace Symfony\Component\Config
-{
-use Symfony\Component\Config\Resource\ResourceInterface;
-use Symfony\Component\Filesystem\Exception\IOException;
-use Symfony\Component\Filesystem\Filesystem;
-class ResourceCheckerConfigCache implements ConfigCacheInterface
-{
-private $file;
-private $resourceCheckers;
-public function __construct($file, array $resourceCheckers = array())
-{
-$this->file = $file;
-$this->resourceCheckers = $resourceCheckers;
+if (self::RELATIVE_PATH === $referenceType) {
+$url = self::getRelativePath($this->context->getPathInfo(), $url);
+} else {
+$url = $schemeAuthority.$this->context->getBaseUrl().$url;
 }
-public function getPath()
-{
-return $this->file;
-}
-public function isFresh()
-{
-if (!is_file($this->file)) {
-return false;
-}
-if (!$this->resourceCheckers) {
-return true; }
-$metadata = $this->getMetaFile();
-if (!is_file($metadata)) {
-return true;
-}
-$metadata = $this->getMetaFile();
-if (!is_file($metadata)) {
-return false;
-}
-$e = null;
-$meta = false;
-$time = filemtime($this->file);
-$signalingException = new \UnexpectedValueException();
-$prevUnserializeHandler = ini_set('unserialize_callback_func','');
-$prevErrorHandler = set_error_handler(function ($type, $msg, $file, $line, $context) use (&$prevErrorHandler, $signalingException) {
-if (E_WARNING === $type &&'Class __PHP_Incomplete_Class has no unserializer'=== $msg) {
-throw $signalingException;
-}
-return $prevErrorHandler ? $prevErrorHandler($type, $msg, $file, $line, $context) : false;
+$extra = array_udiff_assoc(array_diff_key($parameters, $variables), $defaults, function ($a, $b) {
+return $a == $b ? 0 : 1;
 });
-try {
-$meta = unserialize(file_get_contents($metadata));
-} catch (\Error $e) {
-} catch (\Exception $e) {
+if ($extra && $query = http_build_query($extra,'','&')) {
+$url .='?'.strtr($query, array('%2F'=>'/'));
 }
-restore_error_handler();
-ini_set('unserialize_callback_func', $prevUnserializeHandler);
-if (null !== $e && $e !== $signalingException) {
+return $url;
+}
+public static function getRelativePath($basePath, $targetPath)
+{
+if ($basePath === $targetPath) {
+return'';
+}
+$sourceDirs = explode('/', isset($basePath[0]) &&'/'=== $basePath[0] ? substr($basePath, 1) : $basePath);
+$targetDirs = explode('/', isset($targetPath[0]) &&'/'=== $targetPath[0] ? substr($targetPath, 1) : $targetPath);
+array_pop($sourceDirs);
+$targetFile = array_pop($targetDirs);
+foreach ($sourceDirs as $i => $dir) {
+if (isset($targetDirs[$i]) && $dir === $targetDirs[$i]) {
+unset($sourceDirs[$i], $targetDirs[$i]);
+} else {
+break;
+}
+}
+$targetDirs[] = $targetFile;
+$path = str_repeat('../', count($sourceDirs)).implode('/', $targetDirs);
+return''=== $path ||'/'=== $path[0]
+|| false !== ($colonPos = strpos($path,':')) && ($colonPos < ($slashPos = strpos($path,'/')) || false === $slashPos)
+? "./$path" : $path;
+}
+}
+}
+namespace Symfony\Component\Routing
+{
+use Symfony\Component\HttpFoundation\Request;
+class RequestContext
+{
+private $baseUrl;
+private $pathInfo;
+private $method;
+private $host;
+private $scheme;
+private $httpPort;
+private $httpsPort;
+private $queryString;
+private $parameters = array();
+public function __construct($baseUrl ='', $method ='GET', $host ='localhost', $scheme ='http', $httpPort = 80, $httpsPort = 443, $path ='/', $queryString ='')
+{
+$this->setBaseUrl($baseUrl);
+$this->setMethod($method);
+$this->setHost($host);
+$this->setScheme($scheme);
+$this->setHttpPort($httpPort);
+$this->setHttpsPort($httpsPort);
+$this->setPathInfo($path);
+$this->setQueryString($queryString);
+}
+public function fromRequest(Request $request)
+{
+$this->setBaseUrl($request->getBaseUrl());
+$this->setPathInfo($request->getPathInfo());
+$this->setMethod($request->getMethod());
+$this->setHost($request->getHost());
+$this->setScheme($request->getScheme());
+$this->setHttpPort($request->isSecure() ? $this->httpPort : $request->getPort());
+$this->setHttpsPort($request->isSecure() ? $request->getPort() : $this->httpsPort);
+$this->setQueryString($request->server->get('QUERY_STRING',''));
+return $this;
+}
+public function getBaseUrl()
+{
+return $this->baseUrl;
+}
+public function setBaseUrl($baseUrl)
+{
+$this->baseUrl = $baseUrl;
+return $this;
+}
+public function getPathInfo()
+{
+return $this->pathInfo;
+}
+public function setPathInfo($pathInfo)
+{
+$this->pathInfo = $pathInfo;
+return $this;
+}
+public function getMethod()
+{
+return $this->method;
+}
+public function setMethod($method)
+{
+$this->method = strtoupper($method);
+return $this;
+}
+public function getHost()
+{
+return $this->host;
+}
+public function setHost($host)
+{
+$this->host = strtolower($host);
+return $this;
+}
+public function getScheme()
+{
+return $this->scheme;
+}
+public function setScheme($scheme)
+{
+$this->scheme = strtolower($scheme);
+return $this;
+}
+public function getHttpPort()
+{
+return $this->httpPort;
+}
+public function setHttpPort($httpPort)
+{
+$this->httpPort = (int) $httpPort;
+return $this;
+}
+public function getHttpsPort()
+{
+return $this->httpsPort;
+}
+public function setHttpsPort($httpsPort)
+{
+$this->httpsPort = (int) $httpsPort;
+return $this;
+}
+public function getQueryString()
+{
+return $this->queryString;
+}
+public function setQueryString($queryString)
+{
+$this->queryString = (string) $queryString;
+return $this;
+}
+public function getParameters()
+{
+return $this->parameters;
+}
+public function setParameters(array $parameters)
+{
+$this->parameters = $parameters;
+return $this;
+}
+public function getParameter($name)
+{
+return isset($this->parameters[$name]) ? $this->parameters[$name] : null;
+}
+public function hasParameter($name)
+{
+return array_key_exists($name, $this->parameters);
+}
+public function setParameter($name, $parameter)
+{
+$this->parameters[$name] = $parameter;
+return $this;
+}
+}
+}
+namespace Symfony\Component\Routing\Matcher
+{
+use Symfony\Component\Routing\RequestContextAwareInterface;
+use Symfony\Component\Routing\Exception\ResourceNotFoundException;
+use Symfony\Component\Routing\Exception\MethodNotAllowedException;
+interface UrlMatcherInterface extends RequestContextAwareInterface
+{
+public function match($pathinfo);
+}
+}
+namespace Symfony\Component\Routing
+{
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Component\Routing\Matcher\UrlMatcherInterface;
+interface RouterInterface extends UrlMatcherInterface, UrlGeneratorInterface
+{
+public function getRouteCollection();
+}
+}
+namespace Symfony\Component\Routing\Matcher
+{
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Routing\Exception\ResourceNotFoundException;
+use Symfony\Component\Routing\Exception\MethodNotAllowedException;
+interface RequestMatcherInterface
+{
+public function matchRequest(Request $request);
+}
+}
+namespace Symfony\Component\Routing
+{
+use Symfony\Component\Config\Loader\LoaderInterface;
+use Symfony\Component\Config\ConfigCacheInterface;
+use Symfony\Component\Config\ConfigCacheFactoryInterface;
+use Symfony\Component\Config\ConfigCacheFactory;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\Routing\Generator\ConfigurableRequirementsInterface;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Component\Routing\Generator\Dumper\GeneratorDumperInterface;
+use Symfony\Component\Routing\Matcher\RequestMatcherInterface;
+use Symfony\Component\Routing\Matcher\UrlMatcherInterface;
+use Symfony\Component\Routing\Matcher\Dumper\MatcherDumperInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\ExpressionLanguage\ExpressionFunctionProviderInterface;
+class Router implements RouterInterface, RequestMatcherInterface
+{
+protected $matcher;
+protected $generator;
+protected $context;
+protected $loader;
+protected $collection;
+protected $resource;
+protected $options = array();
+protected $logger;
+private $configCacheFactory;
+private $expressionLanguageProviders = array();
+public function __construct(LoaderInterface $loader, $resource, array $options = array(), RequestContext $context = null, LoggerInterface $logger = null)
+{
+$this->loader = $loader;
+$this->resource = $resource;
+$this->logger = $logger;
+$this->context = $context ?: new RequestContext();
+$this->setOptions($options);
+}
+public function setOptions(array $options)
+{
+$this->options = array('cache_dir'=> null,'debug'=> false,'generator_class'=>'Symfony\\Component\\Routing\\Generator\\UrlGenerator','generator_base_class'=>'Symfony\\Component\\Routing\\Generator\\UrlGenerator','generator_dumper_class'=>'Symfony\\Component\\Routing\\Generator\\Dumper\\PhpGeneratorDumper','generator_cache_class'=>'ProjectUrlGenerator','matcher_class'=>'Symfony\\Component\\Routing\\Matcher\\UrlMatcher','matcher_base_class'=>'Symfony\\Component\\Routing\\Matcher\\UrlMatcher','matcher_dumper_class'=>'Symfony\\Component\\Routing\\Matcher\\Dumper\\PhpMatcherDumper','matcher_cache_class'=>'ProjectUrlMatcher','resource_type'=> null,'strict_requirements'=> true,
+);
+$invalid = array();
+foreach ($options as $key => $value) {
+if (array_key_exists($key, $this->options)) {
+$this->options[$key] = $value;
+} else {
+$invalid[] = $key;
+}
+}
+if ($invalid) {
+throw new \InvalidArgumentException(sprintf('The Router does not support the following options: "%s".', implode('", "', $invalid)));
+}
+}
+public function setOption($key, $value)
+{
+if (!array_key_exists($key, $this->options)) {
+throw new \InvalidArgumentException(sprintf('The Router does not support the "%s" option.', $key));
+}
+$this->options[$key] = $value;
+}
+public function getOption($key)
+{
+if (!array_key_exists($key, $this->options)) {
+throw new \InvalidArgumentException(sprintf('The Router does not support the "%s" option.', $key));
+}
+return $this->options[$key];
+}
+public function getRouteCollection()
+{
+if (null === $this->collection) {
+$this->collection = $this->loader->load($this->resource, $this->options['resource_type']);
+}
+return $this->collection;
+}
+public function setContext(RequestContext $context)
+{
+$this->context = $context;
+if (null !== $this->matcher) {
+$this->getMatcher()->setContext($context);
+}
+if (null !== $this->generator) {
+$this->getGenerator()->setContext($context);
+}
+}
+public function getContext()
+{
+return $this->context;
+}
+public function setConfigCacheFactory(ConfigCacheFactoryInterface $configCacheFactory)
+{
+$this->configCacheFactory = $configCacheFactory;
+}
+public function generate($name, $parameters = array(), $referenceType = self::ABSOLUTE_PATH)
+{
+return $this->getGenerator()->generate($name, $parameters, $referenceType);
+}
+public function match($pathinfo)
+{
+return $this->getMatcher()->match($pathinfo);
+}
+public function matchRequest(Request $request)
+{
+$matcher = $this->getMatcher();
+if (!$matcher instanceof RequestMatcherInterface) {
+return $matcher->match($request->getPathInfo());
+}
+return $matcher->matchRequest($request);
+}
+public function getMatcher()
+{
+if (null !== $this->matcher) {
+return $this->matcher;
+}
+if (null === $this->options['cache_dir'] || null === $this->options['matcher_cache_class']) {
+$this->matcher = new $this->options['matcher_class']($this->getRouteCollection(), $this->context);
+if (method_exists($this->matcher,'addExpressionLanguageProvider')) {
+foreach ($this->expressionLanguageProviders as $provider) {
+$this->matcher->addExpressionLanguageProvider($provider);
+}
+}
+return $this->matcher;
+}
+$cache = $this->getConfigCacheFactory()->cache($this->options['cache_dir'].'/'.$this->options['matcher_cache_class'].'.php',
+function (ConfigCacheInterface $cache) {
+$dumper = $this->getMatcherDumperInstance();
+if (method_exists($dumper,'addExpressionLanguageProvider')) {
+foreach ($this->expressionLanguageProviders as $provider) {
+$dumper->addExpressionLanguageProvider($provider);
+}
+}
+$options = array('class'=> $this->options['matcher_cache_class'],'base_class'=> $this->options['matcher_base_class'],
+);
+$cache->write($dumper->dump($options), $this->getRouteCollection()->getResources());
+}
+);
+require_once $cache->getPath();
+return $this->matcher = new $this->options['matcher_cache_class']($this->context);
+}
+public function getGenerator()
+{
+if (null !== $this->generator) {
+return $this->generator;
+}
+if (null === $this->options['cache_dir'] || null === $this->options['generator_cache_class']) {
+$this->generator = new $this->options['generator_class']($this->getRouteCollection(), $this->context, $this->logger);
+} else {
+$cache = $this->getConfigCacheFactory()->cache($this->options['cache_dir'].'/'.$this->options['generator_cache_class'].'.php',
+function (ConfigCacheInterface $cache) {
+$dumper = $this->getGeneratorDumperInstance();
+$options = array('class'=> $this->options['generator_cache_class'],'base_class'=> $this->options['generator_base_class'],
+);
+$cache->write($dumper->dump($options), $this->getRouteCollection()->getResources());
+}
+);
+require_once $cache->getPath();
+$this->generator = new $this->options['generator_cache_class']($this->context, $this->logger);
+}
+if ($this->generator instanceof ConfigurableRequirementsInterface) {
+$this->generator->setStrictRequirements($this->options['strict_requirements']);
+}
+return $this->generator;
+}
+public function addExpressionLanguageProvider(ExpressionFunctionProviderInterface $provider)
+{
+$this->expressionLanguageProviders[] = $provider;
+}
+protected function getGeneratorDumperInstance()
+{
+return new $this->options['generator_dumper_class']($this->getRouteCollection());
+}
+protected function getMatcherDumperInstance()
+{
+return new $this->options['matcher_dumper_class']($this->getRouteCollection());
+}
+private function getConfigCacheFactory()
+{
+if (null === $this->configCacheFactory) {
+$this->configCacheFactory = new ConfigCacheFactory($this->options['debug']);
+}
+return $this->configCacheFactory;
+}
+}
+}
+namespace Symfony\Component\Routing\Matcher
+{
+interface RedirectableUrlMatcherInterface
+{
+public function redirect($path, $route, $scheme = null);
+}
+}
+namespace Symfony\Component\Routing\Matcher
+{
+use Symfony\Component\Routing\Exception\MethodNotAllowedException;
+use Symfony\Component\Routing\Exception\ResourceNotFoundException;
+use Symfony\Component\Routing\RouteCollection;
+use Symfony\Component\Routing\RequestContext;
+use Symfony\Component\Routing\Route;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
+use Symfony\Component\ExpressionLanguage\ExpressionFunctionProviderInterface;
+class UrlMatcher implements UrlMatcherInterface, RequestMatcherInterface
+{
+const REQUIREMENT_MATCH = 0;
+const REQUIREMENT_MISMATCH = 1;
+const ROUTE_MATCH = 2;
+protected $context;
+protected $allow = array();
+protected $routes;
+protected $request;
+protected $expressionLanguage;
+protected $expressionLanguageProviders = array();
+public function __construct(RouteCollection $routes, RequestContext $context)
+{
+$this->routes = $routes;
+$this->context = $context;
+}
+public function setContext(RequestContext $context)
+{
+$this->context = $context;
+}
+public function getContext()
+{
+return $this->context;
+}
+public function match($pathinfo)
+{
+$this->allow = array();
+if ($ret = $this->matchCollection(rawurldecode($pathinfo), $this->routes)) {
+return $ret;
+}
+throw 0 < count($this->allow)
+? new MethodNotAllowedException(array_unique($this->allow))
+: new ResourceNotFoundException(sprintf('No routes found for "%s".', $pathinfo));
+}
+public function matchRequest(Request $request)
+{
+$this->request = $request;
+$ret = $this->match($request->getPathInfo());
+$this->request = null;
+return $ret;
+}
+public function addExpressionLanguageProvider(ExpressionFunctionProviderInterface $provider)
+{
+$this->expressionLanguageProviders[] = $provider;
+}
+protected function matchCollection($pathinfo, RouteCollection $routes)
+{
+foreach ($routes as $name => $route) {
+$compiledRoute = $route->compile();
+if (''!== $compiledRoute->getStaticPrefix() && 0 !== strpos($pathinfo, $compiledRoute->getStaticPrefix())) {
+continue;
+}
+if (!preg_match($compiledRoute->getRegex(), $pathinfo, $matches)) {
+continue;
+}
+$hostMatches = array();
+if ($compiledRoute->getHostRegex() && !preg_match($compiledRoute->getHostRegex(), $this->context->getHost(), $hostMatches)) {
+continue;
+}
+if ($requiredMethods = $route->getMethods()) {
+if ('HEAD'=== $method = $this->context->getMethod()) {
+$method ='GET';
+}
+if (!in_array($method, $requiredMethods)) {
+$this->allow = array_merge($this->allow, $requiredMethods);
+continue;
+}
+}
+$status = $this->handleRouteRequirements($pathinfo, $name, $route);
+if (self::ROUTE_MATCH === $status[0]) {
+return $status[1];
+}
+if (self::REQUIREMENT_MISMATCH === $status[0]) {
+continue;
+}
+return $this->getAttributes($route, $name, array_replace($matches, $hostMatches));
+}
+}
+protected function getAttributes(Route $route, $name, array $attributes)
+{
+$attributes['_route'] = $name;
+return $this->mergeDefaults($attributes, $route->getDefaults());
+}
+protected function handleRouteRequirements($pathinfo, $name, Route $route)
+{
+if ($route->getCondition() && !$this->getExpressionLanguage()->evaluate($route->getCondition(), array('context'=> $this->context,'request'=> $this->request))) {
+return array(self::REQUIREMENT_MISMATCH, null);
+}
+$scheme = $this->context->getScheme();
+$status = $route->getSchemes() && !$route->hasScheme($scheme) ? self::REQUIREMENT_MISMATCH : self::REQUIREMENT_MATCH;
+return array($status, null);
+}
+protected function mergeDefaults($params, $defaults)
+{
+foreach ($params as $key => $value) {
+if (!is_int($key)) {
+$defaults[$key] = $value;
+}
+}
+return $defaults;
+}
+protected function getExpressionLanguage()
+{
+if (null === $this->expressionLanguage) {
+if (!class_exists('Symfony\Component\ExpressionLanguage\ExpressionLanguage')) {
+throw new \RuntimeException('Unable to use expressions as the Symfony ExpressionLanguage component is not installed.');
+}
+$this->expressionLanguage = new ExpressionLanguage(null, $this->expressionLanguageProviders);
+}
+return $this->expressionLanguage;
+}
+}
+}
+namespace Symfony\Component\Routing\Matcher
+{
+use Symfony\Component\Routing\Exception\ResourceNotFoundException;
+use Symfony\Component\Routing\Route;
+abstract class RedirectableUrlMatcher extends UrlMatcher implements RedirectableUrlMatcherInterface
+{
+public function match($pathinfo)
+{
+try {
+$parameters = parent::match($pathinfo);
+} catch (ResourceNotFoundException $e) {
+if ('/'=== substr($pathinfo, -1) || !in_array($this->context->getMethod(), array('HEAD','GET'))) {
 throw $e;
 }
-if (false === $meta) {
-return false;
-}
-foreach ($meta as $resource) {
-foreach ($this->resourceCheckers as $checker) {
-if (!$checker->supports($resource)) {
-continue; }
-if ($checker->isFresh($resource, $time)) {
-break; }
-return false; }
-}
-return true;
-}
-public function write($content, array $metadata = null)
-{
-$mode = 0666;
-$umask = umask();
-$filesystem = new Filesystem();
-$filesystem->dumpFile($this->file, $content, null);
 try {
-$filesystem->chmod($this->file, $mode, $umask);
-} catch (IOException $e) {
-}
-if (null !== $metadata) {
-$filesystem->dumpFile($this->getMetaFile(), serialize($metadata), null);
-try {
-$filesystem->chmod($this->getMetaFile(), $mode, $umask);
-} catch (IOException $e) {
+parent::match($pathinfo.'/');
+return $this->redirect($pathinfo.'/', null);
+} catch (ResourceNotFoundException $e2) {
+throw $e;
 }
 }
+return $parameters;
 }
-private function getMetaFile()
+protected function handleRouteRequirements($pathinfo, $name, Route $route)
 {
-return $this->file.'.meta';
+if ($route->getCondition() && !$this->getExpressionLanguage()->evaluate($route->getCondition(), array('context'=> $this->context,'request'=> $this->request))) {
+return array(self::REQUIREMENT_MISMATCH, null);
+}
+$scheme = $this->context->getScheme();
+$schemes = $route->getSchemes();
+if ($schemes && !$route->hasScheme($scheme)) {
+return array(self::ROUTE_MATCH, $this->redirect($pathinfo, $name, current($schemes)));
+}
+return array(self::REQUIREMENT_MATCH, null);
+}
+}
+}
+namespace Symfony\Bundle\FrameworkBundle\Routing
+{
+use Symfony\Component\Routing\Matcher\RedirectableUrlMatcher as BaseMatcher;
+class RedirectableUrlMatcher extends BaseMatcher
+{
+public function redirect($path, $route, $scheme = null)
+{
+return array('_controller'=>'Symfony\\Bundle\\FrameworkBundle\\Controller\\RedirectController::urlRedirectAction','path'=> $path,'permanent'=> true,'scheme'=> $scheme,'httpPort'=> $this->context->getHttpPort(),'httpsPort'=> $this->context->getHttpsPort(),'_route'=> $route,
+);
+}
+}
+}
+namespace Symfony\Component\HttpKernel\CacheWarmer
+{
+interface WarmableInterface
+{
+public function warmUp($cacheDir);
+}
+}
+namespace Symfony\Bundle\FrameworkBundle\Routing
+{
+use Symfony\Component\Routing\Router as BaseRouter;
+use Symfony\Component\Routing\RequestContext;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\Routing\RouteCollection;
+use Symfony\Component\HttpKernel\CacheWarmer\WarmableInterface;
+use Symfony\Component\DependencyInjection\Exception\ParameterNotFoundException;
+use Symfony\Component\DependencyInjection\Exception\RuntimeException;
+class Router extends BaseRouter implements WarmableInterface
+{
+private $container;
+public function __construct(ContainerInterface $container, $resource, array $options = array(), RequestContext $context = null)
+{
+$this->container = $container;
+$this->resource = $resource;
+$this->context = $context ?: new RequestContext();
+$this->setOptions($options);
+}
+public function getRouteCollection()
+{
+if (null === $this->collection) {
+$this->collection = $this->container->get('routing.loader')->load($this->resource, $this->options['resource_type']);
+$this->resolveParameters($this->collection);
+}
+return $this->collection;
+}
+public function warmUp($cacheDir)
+{
+$currentDir = $this->getOption('cache_dir');
+$this->setOption('cache_dir', $cacheDir);
+$this->getMatcher();
+$this->getGenerator();
+$this->setOption('cache_dir', $currentDir);
+}
+private function resolveParameters(RouteCollection $collection)
+{
+foreach ($collection as $route) {
+foreach ($route->getDefaults() as $name => $value) {
+$route->setDefault($name, $this->resolve($value));
+}
+foreach ($route->getRequirements() as $name => $value) {
+$route->setRequirement($name, $this->resolve($value));
+}
+$route->setPath($this->resolve($route->getPath()));
+$route->setHost($this->resolve($route->getHost()));
+$schemes = array();
+foreach ($route->getSchemes() as $scheme) {
+$schemes = array_merge($schemes, explode('|', $this->resolve($scheme)));
+}
+$route->setSchemes($schemes);
+$methods = array();
+foreach ($route->getMethods() as $method) {
+$methods = array_merge($methods, explode('|', $this->resolve($method)));
+}
+$route->setMethods($methods);
+$route->setCondition($this->resolve($route->getCondition()));
+}
+}
+private function resolve($value)
+{
+if (is_array($value)) {
+foreach ($value as $key => $val) {
+$value[$key] = $this->resolve($val);
+}
+return $value;
+}
+if (!is_string($value)) {
+return $value;
+}
+$container = $this->container;
+$escapedValue = preg_replace_callback('/%%|%([^%\s]++)%/', function ($match) use ($container, $value) {
+if (!isset($match[1])) {
+return'%%';
+}
+$resolved = $container->getParameter($match[1]);
+if (is_string($resolved) || is_numeric($resolved)) {
+return (string) $resolved;
+}
+throw new RuntimeException(sprintf('The container parameter "%s", used in the route configuration value "%s", '.'must be a string or numeric, but it is of type %s.',
+$match[1],
+$value,
+gettype($resolved)
+)
+);
+}, $value);
+return str_replace('%%','%', $escapedValue);
 }
 }
 }
 namespace Symfony\Component\Config
 {
-use Symfony\Component\Config\Resource\SelfCheckingResourceChecker;
-class ConfigCache extends ResourceCheckerConfigCache
-{
-private $debug;
-public function __construct($file, $debug)
-{
-$this->debug = (bool) $debug;
-$checkers = array();
-if (true === $this->debug) {
-$checkers = array(new SelfCheckingResourceChecker());
-}
-parent::__construct($file, $checkers);
-}
-public function isFresh()
-{
-if (!$this->debug && is_file($this->getPath())) {
-return true;
-}
-return parent::isFresh();
-}
-}
-}
-namespace Symfony\Component\Config
-{
-use Symfony\Component\Config\Exception\FileLocatorFileNotFoundException;
 class FileLocator implements FileLocatorInterface
 {
 protected $paths;
@@ -5013,7 +2002,7 @@ throw new \InvalidArgumentException('An empty file name is not valid to be locat
 }
 if ($this->isAbsolutePath($name)) {
 if (!file_exists($name)) {
-throw new FileLocatorFileNotFoundException(sprintf('The file "%s" does not exist.', $name));
+throw new \InvalidArgumentException(sprintf('The file "%s" does not exist.', $name));
 }
 return $name;
 }
@@ -5032,7 +2021,7 @@ $filepaths[] = $file;
 }
 }
 if (!$filepaths) {
-throw new FileLocatorFileNotFoundException(sprintf('The file "%s" does not exist (in: %s).', $name, implode(', ', $paths)));
+throw new \InvalidArgumentException(sprintf('The file "%s" does not exist (in: %s).', $name, implode(', ', $paths)));
 }
 return $filepaths;
 }
@@ -5049,236 +2038,18 @@ return false;
 }
 }
 }
-namespace Symfony\Component\DependencyInjection
+namespace Symfony\Component\EventDispatcher
 {
-use Symfony\Component\DependencyInjection\Exception\InvalidArgumentException;
-use Symfony\Component\DependencyInjection\Exception\ServiceCircularReferenceException;
-use Symfony\Component\DependencyInjection\Exception\ServiceNotFoundException;
-interface ContainerInterface
+class Event
 {
-const EXCEPTION_ON_INVALID_REFERENCE = 1;
-const NULL_ON_INVALID_REFERENCE = 2;
-const IGNORE_ON_INVALID_REFERENCE = 3;
-public function set($id, $service);
-public function get($id, $invalidBehavior = self::EXCEPTION_ON_INVALID_REFERENCE);
-public function has($id);
-public function initialized($id);
-public function getParameter($name);
-public function hasParameter($name);
-public function setParameter($name, $value);
-}
-}
-namespace Symfony\Component\DependencyInjection
+private $propagationStopped = false;
+public function isPropagationStopped()
 {
-interface ResettableContainerInterface extends ContainerInterface
+return $this->propagationStopped;
+}
+public function stopPropagation()
 {
-public function reset();
-}
-}
-namespace Symfony\Component\DependencyInjection
-{
-use Symfony\Component\DependencyInjection\Exception\EnvNotFoundException;
-use Symfony\Component\DependencyInjection\Exception\InvalidArgumentException;
-use Symfony\Component\DependencyInjection\Exception\ServiceNotFoundException;
-use Symfony\Component\DependencyInjection\Exception\ServiceCircularReferenceException;
-use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
-use Symfony\Component\DependencyInjection\ParameterBag\EnvPlaceholderParameterBag;
-use Symfony\Component\DependencyInjection\ParameterBag\FrozenParameterBag;
-class Container implements ResettableContainerInterface
-{
-protected $parameterBag;
-protected $services = array();
-protected $methodMap = array();
-protected $privates = array();
-protected $aliases = array();
-protected $loading = array();
-private $underscoreMap = array('_'=>'','.'=>'_','\\'=>'_');
-private $envCache = array();
-public function __construct(ParameterBagInterface $parameterBag = null)
-{
-$this->parameterBag = $parameterBag ?: new EnvPlaceholderParameterBag();
-}
-public function compile()
-{
-$this->parameterBag->resolve();
-$this->parameterBag = new FrozenParameterBag($this->parameterBag->all());
-}
-public function isFrozen()
-{
-return $this->parameterBag instanceof FrozenParameterBag;
-}
-public function getParameterBag()
-{
-return $this->parameterBag;
-}
-public function getParameter($name)
-{
-return $this->parameterBag->get($name);
-}
-public function hasParameter($name)
-{
-return $this->parameterBag->has($name);
-}
-public function setParameter($name, $value)
-{
-$this->parameterBag->set($name, $value);
-}
-public function set($id, $service)
-{
-$id = strtolower($id);
-if ('service_container'=== $id) {
-throw new InvalidArgumentException('You cannot set service "service_container".');
-}
-if (isset($this->aliases[$id])) {
-unset($this->aliases[$id]);
-}
-$this->services[$id] = $service;
-if (null === $service) {
-unset($this->services[$id]);
-}
-if (isset($this->privates[$id])) {
-if (null === $service) {
-@trigger_error(sprintf('Unsetting the "%s" private service is deprecated since Symfony 3.2 and won\'t be supported anymore in Symfony 4.0.', $id), E_USER_DEPRECATED);
-unset($this->privates[$id]);
-} else {
-@trigger_error(sprintf('Setting the "%s" private service is deprecated since Symfony 3.2 and won\'t be supported anymore in Symfony 4.0. A new public service will be created instead.', $id), E_USER_DEPRECATED);
-}
-}
-}
-public function has($id)
-{
-for ($i = 2;;) {
-if ('service_container'=== $id
-|| isset($this->aliases[$id])
-|| isset($this->services[$id])
-) {
-return true;
-}
-if (isset($this->privates[$id])) {
-@trigger_error(sprintf('Checking for the existence of the "%s" private service is deprecated since Symfony 3.2 and won\'t be supported anymore in Symfony 4.0.', $id), E_USER_DEPRECATED);
-}
-if (isset($this->methodMap[$id])) {
-return true;
-}
-if (--$i && $id !== $lcId = strtolower($id)) {
-$id = $lcId;
-continue;
-}
-if (!$this->methodMap && !$this instanceof ContainerBuilder && __CLASS__ !== static::class && method_exists($this,'get'.strtr($id, $this->underscoreMap).'Service')) {
-@trigger_error('Generating a dumped container without populating the method map is deprecated since 3.2 and will be unsupported in 4.0. Update your dumper to generate the method map.', E_USER_DEPRECATED);
-return true;
-}
-return false;
-}
-}
-public function get($id, $invalidBehavior = self::EXCEPTION_ON_INVALID_REFERENCE)
-{
-for ($i = 2;;) {
-if ('service_container'=== $id) {
-return $this;
-}
-if (isset($this->aliases[$id])) {
-$id = $this->aliases[$id];
-}
-if (isset($this->services[$id])) {
-return $this->services[$id];
-}
-if (isset($this->loading[$id])) {
-throw new ServiceCircularReferenceException($id, array_keys($this->loading));
-}
-if (isset($this->methodMap[$id])) {
-$method = $this->methodMap[$id];
-} elseif (--$i && $id !== $lcId = strtolower($id)) {
-$id = $lcId;
-continue;
-} elseif (!$this->methodMap && !$this instanceof ContainerBuilder && __CLASS__ !== static::class && method_exists($this, $method ='get'.strtr($id, $this->underscoreMap).'Service')) {
-@trigger_error('Generating a dumped container without populating the method map is deprecated since 3.2 and will be unsupported in 4.0. Update your dumper to generate the method map.', E_USER_DEPRECATED);
-} else {
-if (self::EXCEPTION_ON_INVALID_REFERENCE === $invalidBehavior) {
-if (!$id) {
-throw new ServiceNotFoundException($id);
-}
-$alternatives = array();
-foreach ($this->getServiceIds() as $knownId) {
-$lev = levenshtein($id, $knownId);
-if ($lev <= strlen($id) / 3 || false !== strpos($knownId, $id)) {
-$alternatives[] = $knownId;
-}
-}
-throw new ServiceNotFoundException($id, null, null, $alternatives);
-}
-return;
-}
-if (isset($this->privates[$id])) {
-@trigger_error(sprintf('Requesting the "%s" private service is deprecated since Symfony 3.2 and won\'t be supported anymore in Symfony 4.0.', $id), E_USER_DEPRECATED);
-}
-$this->loading[$id] = true;
-try {
-$service = $this->$method();
-} catch (\Exception $e) {
-unset($this->services[$id]);
-throw $e;
-} finally {
-unset($this->loading[$id]);
-}
-return $service;
-}
-}
-public function initialized($id)
-{
-$id = strtolower($id);
-if ('service_container'=== $id) {
-return false;
-}
-if (isset($this->aliases[$id])) {
-$id = $this->aliases[$id];
-}
-return isset($this->services[$id]);
-}
-public function reset()
-{
-$this->services = array();
-}
-public function getServiceIds()
-{
-$ids = array();
-if (!$this->methodMap && !$this instanceof ContainerBuilder && __CLASS__ !== static::class) {
-@trigger_error('Generating a dumped container without populating the method map is deprecated since 3.2 and will be unsupported in 4.0. Update your dumper to generate the method map.', E_USER_DEPRECATED);
-foreach (get_class_methods($this) as $method) {
-if (preg_match('/^get(.+)Service$/', $method, $match)) {
-$ids[] = self::underscore($match[1]);
-}
-}
-}
-$ids[] ='service_container';
-return array_unique(array_merge($ids, array_keys($this->methodMap), array_keys($this->services)));
-}
-public static function camelize($id)
-{
-return strtr(ucwords(strtr($id, array('_'=>' ','.'=>'_ ','\\'=>'_ '))), array(' '=>''));
-}
-public static function underscore($id)
-{
-return strtolower(preg_replace(array('/([A-Z]+)([A-Z][a-z])/','/([a-z\d])([A-Z])/'), array('\\1_\\2','\\1_\\2'), str_replace('_','.', $id)));
-}
-protected function getEnv($name)
-{
-if (isset($this->envCache[$name]) || array_key_exists($name, $this->envCache)) {
-return $this->envCache[$name];
-}
-if (isset($_ENV[$name])) {
-return $this->envCache[$name] = $_ENV[$name];
-}
-if (false !== $env = getenv($name)) {
-return $this->envCache[$name] = $env;
-}
-if (!$this->hasParameter("env($name)")) {
-throw new EnvNotFoundException($name);
-}
-return $this->envCache[$name] = $this->getParameter("env($name)");
-}
-private function __clone()
-{
+$this->propagationStopped = true;
 }
 }
 }
@@ -5504,1617 +2275,6 @@ $this->listeners[$eventName][$key] = $listener;
 }
 }
 }
-namespace Symfony\Component\EventDispatcher
-{
-class Event
-{
-private $propagationStopped = false;
-public function isPropagationStopped()
-{
-return $this->propagationStopped;
-}
-public function stopPropagation()
-{
-$this->propagationStopped = true;
-}
-}
-}
-namespace Symfony\Component\HttpFoundation
-{
-interface RequestMatcherInterface
-{
-public function matches(Request $request);
-}
-}
-namespace Symfony\Component\HttpFoundation
-{
-class RequestMatcher implements RequestMatcherInterface
-{
-private $path;
-private $host;
-private $methods = array();
-private $ips = array();
-private $attributes = array();
-private $schemes = array();
-public function __construct($path = null, $host = null, $methods = null, $ips = null, array $attributes = array(), $schemes = null)
-{
-$this->matchPath($path);
-$this->matchHost($host);
-$this->matchMethod($methods);
-$this->matchIps($ips);
-$this->matchScheme($schemes);
-foreach ($attributes as $k => $v) {
-$this->matchAttribute($k, $v);
-}
-}
-public function matchScheme($scheme)
-{
-$this->schemes = null !== $scheme ? array_map('strtolower', (array) $scheme) : array();
-}
-public function matchHost($regexp)
-{
-$this->host = $regexp;
-}
-public function matchPath($regexp)
-{
-$this->path = $regexp;
-}
-public function matchIp($ip)
-{
-$this->matchIps($ip);
-}
-public function matchIps($ips)
-{
-$this->ips = null !== $ips ? (array) $ips : array();
-}
-public function matchMethod($method)
-{
-$this->methods = null !== $method ? array_map('strtoupper', (array) $method) : array();
-}
-public function matchAttribute($key, $regexp)
-{
-$this->attributes[$key] = $regexp;
-}
-public function matches(Request $request)
-{
-if ($this->schemes && !in_array($request->getScheme(), $this->schemes, true)) {
-return false;
-}
-if ($this->methods && !in_array($request->getMethod(), $this->methods, true)) {
-return false;
-}
-foreach ($this->attributes as $key => $pattern) {
-if (!preg_match('{'.$pattern.'}', $request->attributes->get($key))) {
-return false;
-}
-}
-if (null !== $this->path && !preg_match('{'.$this->path.'}', rawurldecode($request->getPathInfo()))) {
-return false;
-}
-if (null !== $this->host && !preg_match('{'.$this->host.'}i', $request->getHost())) {
-return false;
-}
-if (IpUtils::checkIp($request->getClientIp(), $this->ips)) {
-return true;
-}
-return count($this->ips) === 0;
-}
-}
-}
-namespace Symfony\Component\HttpFoundation
-{
-class Response
-{
-const HTTP_CONTINUE = 100;
-const HTTP_SWITCHING_PROTOCOLS = 101;
-const HTTP_PROCESSING = 102; const HTTP_OK = 200;
-const HTTP_CREATED = 201;
-const HTTP_ACCEPTED = 202;
-const HTTP_NON_AUTHORITATIVE_INFORMATION = 203;
-const HTTP_NO_CONTENT = 204;
-const HTTP_RESET_CONTENT = 205;
-const HTTP_PARTIAL_CONTENT = 206;
-const HTTP_MULTI_STATUS = 207; const HTTP_ALREADY_REPORTED = 208; const HTTP_IM_USED = 226; const HTTP_MULTIPLE_CHOICES = 300;
-const HTTP_MOVED_PERMANENTLY = 301;
-const HTTP_FOUND = 302;
-const HTTP_SEE_OTHER = 303;
-const HTTP_NOT_MODIFIED = 304;
-const HTTP_USE_PROXY = 305;
-const HTTP_RESERVED = 306;
-const HTTP_TEMPORARY_REDIRECT = 307;
-const HTTP_PERMANENTLY_REDIRECT = 308; const HTTP_BAD_REQUEST = 400;
-const HTTP_UNAUTHORIZED = 401;
-const HTTP_PAYMENT_REQUIRED = 402;
-const HTTP_FORBIDDEN = 403;
-const HTTP_NOT_FOUND = 404;
-const HTTP_METHOD_NOT_ALLOWED = 405;
-const HTTP_NOT_ACCEPTABLE = 406;
-const HTTP_PROXY_AUTHENTICATION_REQUIRED = 407;
-const HTTP_REQUEST_TIMEOUT = 408;
-const HTTP_CONFLICT = 409;
-const HTTP_GONE = 410;
-const HTTP_LENGTH_REQUIRED = 411;
-const HTTP_PRECONDITION_FAILED = 412;
-const HTTP_REQUEST_ENTITY_TOO_LARGE = 413;
-const HTTP_REQUEST_URI_TOO_LONG = 414;
-const HTTP_UNSUPPORTED_MEDIA_TYPE = 415;
-const HTTP_REQUESTED_RANGE_NOT_SATISFIABLE = 416;
-const HTTP_EXPECTATION_FAILED = 417;
-const HTTP_I_AM_A_TEAPOT = 418; const HTTP_MISDIRECTED_REQUEST = 421; const HTTP_UNPROCESSABLE_ENTITY = 422; const HTTP_LOCKED = 423; const HTTP_FAILED_DEPENDENCY = 424; const HTTP_RESERVED_FOR_WEBDAV_ADVANCED_COLLECTIONS_EXPIRED_PROPOSAL = 425; const HTTP_UPGRADE_REQUIRED = 426; const HTTP_PRECONDITION_REQUIRED = 428; const HTTP_TOO_MANY_REQUESTS = 429; const HTTP_REQUEST_HEADER_FIELDS_TOO_LARGE = 431; const HTTP_UNAVAILABLE_FOR_LEGAL_REASONS = 451;
-const HTTP_INTERNAL_SERVER_ERROR = 500;
-const HTTP_NOT_IMPLEMENTED = 501;
-const HTTP_BAD_GATEWAY = 502;
-const HTTP_SERVICE_UNAVAILABLE = 503;
-const HTTP_GATEWAY_TIMEOUT = 504;
-const HTTP_VERSION_NOT_SUPPORTED = 505;
-const HTTP_VARIANT_ALSO_NEGOTIATES_EXPERIMENTAL = 506; const HTTP_INSUFFICIENT_STORAGE = 507; const HTTP_LOOP_DETECTED = 508; const HTTP_NOT_EXTENDED = 510; const HTTP_NETWORK_AUTHENTICATION_REQUIRED = 511;
-public $headers;
-protected $content;
-protected $version;
-protected $statusCode;
-protected $statusText;
-protected $charset;
-public static $statusTexts = array(
-100 =>'Continue',
-101 =>'Switching Protocols',
-102 =>'Processing', 200 =>'OK',
-201 =>'Created',
-202 =>'Accepted',
-203 =>'Non-Authoritative Information',
-204 =>'No Content',
-205 =>'Reset Content',
-206 =>'Partial Content',
-207 =>'Multi-Status', 208 =>'Already Reported', 226 =>'IM Used', 300 =>'Multiple Choices',
-301 =>'Moved Permanently',
-302 =>'Found',
-303 =>'See Other',
-304 =>'Not Modified',
-305 =>'Use Proxy',
-307 =>'Temporary Redirect',
-308 =>'Permanent Redirect', 400 =>'Bad Request',
-401 =>'Unauthorized',
-402 =>'Payment Required',
-403 =>'Forbidden',
-404 =>'Not Found',
-405 =>'Method Not Allowed',
-406 =>'Not Acceptable',
-407 =>'Proxy Authentication Required',
-408 =>'Request Timeout',
-409 =>'Conflict',
-410 =>'Gone',
-411 =>'Length Required',
-412 =>'Precondition Failed',
-413 =>'Payload Too Large',
-414 =>'URI Too Long',
-415 =>'Unsupported Media Type',
-416 =>'Range Not Satisfiable',
-417 =>'Expectation Failed',
-418 =>'I\'m a teapot', 421 =>'Misdirected Request', 422 =>'Unprocessable Entity', 423 =>'Locked', 424 =>'Failed Dependency', 425 =>'Reserved for WebDAV advanced collections expired proposal', 426 =>'Upgrade Required', 428 =>'Precondition Required', 429 =>'Too Many Requests', 431 =>'Request Header Fields Too Large', 451 =>'Unavailable For Legal Reasons', 500 =>'Internal Server Error',
-501 =>'Not Implemented',
-502 =>'Bad Gateway',
-503 =>'Service Unavailable',
-504 =>'Gateway Timeout',
-505 =>'HTTP Version Not Supported',
-506 =>'Variant Also Negotiates (Experimental)', 507 =>'Insufficient Storage', 508 =>'Loop Detected', 510 =>'Not Extended', 511 =>'Network Authentication Required', );
-private static $deprecatedMethods = array('setDate','getDate','setExpires','getExpires','setLastModified','getLastModified','setProtocolVersion','getProtocolVersion','setStatusCode','getStatusCode','setCharset','getCharset','setPrivate','setPublic','getAge','getMaxAge','setMaxAge','setSharedMaxAge','getTtl','setTtl','setClientTtl','getEtag','setEtag','hasVary','getVary','setVary','isInvalid','isSuccessful','isRedirection','isClientError','isOk','isForbidden','isNotFound','isRedirect','isEmpty',
-);
-private static $deprecationsTriggered = array(
-__CLASS__ => true,
-BinaryFileResponse::class => true,
-JsonResponse::class => true,
-RedirectResponse::class => true,
-StreamedResponse::class => true,
-);
-public function __construct($content ='', $status = 200, $headers = array())
-{
-$this->headers = new ResponseHeaderBag($headers);
-$this->setContent($content);
-$this->setStatusCode($status);
-$this->setProtocolVersion('1.0');
-$class = get_class($this);
-if ($this instanceof \PHPUnit_Framework_MockObject_MockObject || $this instanceof \Prophecy\Doubler\DoubleInterface) {
-$class = get_parent_class($class);
-}
-if (isset(self::$deprecationsTriggered[$class])) {
-return;
-}
-self::$deprecationsTriggered[$class] = true;
-foreach (self::$deprecatedMethods as $method) {
-$r = new \ReflectionMethod($class, $method);
-if (__CLASS__ !== $r->getDeclaringClass()->getName()) {
-@trigger_error(sprintf('Extending %s::%s() in %s is deprecated since version 3.2 and won\'t be supported anymore in 4.0 as it will be final.', __CLASS__, $method, $class), E_USER_DEPRECATED);
-}
-}
-}
-public static function create($content ='', $status = 200, $headers = array())
-{
-return new static($content, $status, $headers);
-}
-public function __toString()
-{
-return
-sprintf('HTTP/%s %s %s', $this->version, $this->statusCode, $this->statusText)."\r\n".
-$this->headers."\r\n".
-$this->getContent();
-}
-public function __clone()
-{
-$this->headers = clone $this->headers;
-}
-public function prepare(Request $request)
-{
-$headers = $this->headers;
-if ($this->isInformational() || $this->isEmpty()) {
-$this->setContent(null);
-$headers->remove('Content-Type');
-$headers->remove('Content-Length');
-} else {
-if (!$headers->has('Content-Type')) {
-$format = $request->getRequestFormat();
-if (null !== $format && $mimeType = $request->getMimeType($format)) {
-$headers->set('Content-Type', $mimeType);
-}
-}
-$charset = $this->charset ?:'UTF-8';
-if (!$headers->has('Content-Type')) {
-$headers->set('Content-Type','text/html; charset='.$charset);
-} elseif (0 === stripos($headers->get('Content-Type'),'text/') && false === stripos($headers->get('Content-Type'),'charset')) {
-$headers->set('Content-Type', $headers->get('Content-Type').'; charset='.$charset);
-}
-if ($headers->has('Transfer-Encoding')) {
-$headers->remove('Content-Length');
-}
-if ($request->isMethod('HEAD')) {
-$length = $headers->get('Content-Length');
-$this->setContent(null);
-if ($length) {
-$headers->set('Content-Length', $length);
-}
-}
-}
-if ('HTTP/1.0'!= $request->server->get('SERVER_PROTOCOL')) {
-$this->setProtocolVersion('1.1');
-}
-if ('1.0'== $this->getProtocolVersion() && false !== strpos($this->headers->get('Cache-Control'),'no-cache')) {
-$this->headers->set('pragma','no-cache');
-$this->headers->set('expires', -1);
-}
-$this->ensureIEOverSSLCompatibility($request);
-return $this;
-}
-public function sendHeaders()
-{
-if (headers_sent()) {
-return $this;
-}
-if (!$this->headers->has('Date')) {
-$this->setDate(\DateTime::createFromFormat('U', time()));
-}
-foreach ($this->headers->allPreserveCase() as $name => $values) {
-foreach ($values as $value) {
-header($name.': '.$value, false, $this->statusCode);
-}
-}
-header(sprintf('HTTP/%s %s %s', $this->version, $this->statusCode, $this->statusText), true, $this->statusCode);
-foreach ($this->headers->getCookies() as $cookie) {
-if ($cookie->isRaw()) {
-setrawcookie($cookie->getName(), $cookie->getValue(), $cookie->getExpiresTime(), $cookie->getPath(), $cookie->getDomain(), $cookie->isSecure(), $cookie->isHttpOnly());
-} else {
-setcookie($cookie->getName(), $cookie->getValue(), $cookie->getExpiresTime(), $cookie->getPath(), $cookie->getDomain(), $cookie->isSecure(), $cookie->isHttpOnly());
-}
-}
-return $this;
-}
-public function sendContent()
-{
-echo $this->content;
-return $this;
-}
-public function send()
-{
-$this->sendHeaders();
-$this->sendContent();
-if (function_exists('fastcgi_finish_request')) {
-fastcgi_finish_request();
-} elseif ('cli'!== PHP_SAPI) {
-static::closeOutputBuffers(0, true);
-}
-return $this;
-}
-public function setContent($content)
-{
-if (null !== $content && !is_string($content) && !is_numeric($content) && !is_callable(array($content,'__toString'))) {
-throw new \UnexpectedValueException(sprintf('The Response content must be a string or object implementing __toString(), "%s" given.', gettype($content)));
-}
-$this->content = (string) $content;
-return $this;
-}
-public function getContent()
-{
-return $this->content;
-}
-public function setProtocolVersion($version)
-{
-$this->version = $version;
-return $this;
-}
-public function getProtocolVersion()
-{
-return $this->version;
-}
-public function setStatusCode($code, $text = null)
-{
-$this->statusCode = $code = (int) $code;
-if ($this->isInvalid()) {
-throw new \InvalidArgumentException(sprintf('The HTTP status code "%s" is not valid.', $code));
-}
-if (null === $text) {
-$this->statusText = isset(self::$statusTexts[$code]) ? self::$statusTexts[$code] :'unknown status';
-return $this;
-}
-if (false === $text) {
-$this->statusText ='';
-return $this;
-}
-$this->statusText = $text;
-return $this;
-}
-public function getStatusCode()
-{
-return $this->statusCode;
-}
-public function setCharset($charset)
-{
-$this->charset = $charset;
-return $this;
-}
-public function getCharset()
-{
-return $this->charset;
-}
-public function isCacheable()
-{
-if (!in_array($this->statusCode, array(200, 203, 300, 301, 302, 404, 410))) {
-return false;
-}
-if ($this->headers->hasCacheControlDirective('no-store') || $this->headers->getCacheControlDirective('private')) {
-return false;
-}
-return $this->isValidateable() || $this->isFresh();
-}
-public function isFresh()
-{
-return $this->getTtl() > 0;
-}
-public function isValidateable()
-{
-return $this->headers->has('Last-Modified') || $this->headers->has('ETag');
-}
-public function setPrivate()
-{
-$this->headers->removeCacheControlDirective('public');
-$this->headers->addCacheControlDirective('private');
-return $this;
-}
-public function setPublic()
-{
-$this->headers->addCacheControlDirective('public');
-$this->headers->removeCacheControlDirective('private');
-return $this;
-}
-public function mustRevalidate()
-{
-return $this->headers->hasCacheControlDirective('must-revalidate') || $this->headers->hasCacheControlDirective('proxy-revalidate');
-}
-public function getDate()
-{
-if (!$this->headers->has('Date')) {
-$this->setDate(\DateTime::createFromFormat('U', time()));
-}
-return $this->headers->getDate('Date');
-}
-public function setDate(\DateTime $date)
-{
-$date->setTimezone(new \DateTimeZone('UTC'));
-$this->headers->set('Date', $date->format('D, d M Y H:i:s').' GMT');
-return $this;
-}
-public function getAge()
-{
-if (null !== $age = $this->headers->get('Age')) {
-return (int) $age;
-}
-return max(time() - $this->getDate()->format('U'), 0);
-}
-public function expire()
-{
-if ($this->isFresh()) {
-$this->headers->set('Age', $this->getMaxAge());
-}
-return $this;
-}
-public function getExpires()
-{
-try {
-return $this->headers->getDate('Expires');
-} catch (\RuntimeException $e) {
-return \DateTime::createFromFormat(DATE_RFC2822,'Sat, 01 Jan 00 00:00:00 +0000');
-}
-}
-public function setExpires(\DateTime $date = null)
-{
-if (null === $date) {
-$this->headers->remove('Expires');
-} else {
-$date = clone $date;
-$date->setTimezone(new \DateTimeZone('UTC'));
-$this->headers->set('Expires', $date->format('D, d M Y H:i:s').' GMT');
-}
-return $this;
-}
-public function getMaxAge()
-{
-if ($this->headers->hasCacheControlDirective('s-maxage')) {
-return (int) $this->headers->getCacheControlDirective('s-maxage');
-}
-if ($this->headers->hasCacheControlDirective('max-age')) {
-return (int) $this->headers->getCacheControlDirective('max-age');
-}
-if (null !== $this->getExpires()) {
-return $this->getExpires()->format('U') - $this->getDate()->format('U');
-}
-}
-public function setMaxAge($value)
-{
-$this->headers->addCacheControlDirective('max-age', $value);
-return $this;
-}
-public function setSharedMaxAge($value)
-{
-$this->setPublic();
-$this->headers->addCacheControlDirective('s-maxage', $value);
-return $this;
-}
-public function getTtl()
-{
-if (null !== $maxAge = $this->getMaxAge()) {
-return $maxAge - $this->getAge();
-}
-}
-public function setTtl($seconds)
-{
-$this->setSharedMaxAge($this->getAge() + $seconds);
-return $this;
-}
-public function setClientTtl($seconds)
-{
-$this->setMaxAge($this->getAge() + $seconds);
-return $this;
-}
-public function getLastModified()
-{
-return $this->headers->getDate('Last-Modified');
-}
-public function setLastModified(\DateTime $date = null)
-{
-if (null === $date) {
-$this->headers->remove('Last-Modified');
-} else {
-$date = clone $date;
-$date->setTimezone(new \DateTimeZone('UTC'));
-$this->headers->set('Last-Modified', $date->format('D, d M Y H:i:s').' GMT');
-}
-return $this;
-}
-public function getEtag()
-{
-return $this->headers->get('ETag');
-}
-public function setEtag($etag = null, $weak = false)
-{
-if (null === $etag) {
-$this->headers->remove('Etag');
-} else {
-if (0 !== strpos($etag,'"')) {
-$etag ='"'.$etag.'"';
-}
-$this->headers->set('ETag', (true === $weak ?'W/':'').$etag);
-}
-return $this;
-}
-public function setCache(array $options)
-{
-if ($diff = array_diff(array_keys($options), array('etag','last_modified','max_age','s_maxage','private','public'))) {
-throw new \InvalidArgumentException(sprintf('Response does not support the following options: "%s".', implode('", "', array_values($diff))));
-}
-if (isset($options['etag'])) {
-$this->setEtag($options['etag']);
-}
-if (isset($options['last_modified'])) {
-$this->setLastModified($options['last_modified']);
-}
-if (isset($options['max_age'])) {
-$this->setMaxAge($options['max_age']);
-}
-if (isset($options['s_maxage'])) {
-$this->setSharedMaxAge($options['s_maxage']);
-}
-if (isset($options['public'])) {
-if ($options['public']) {
-$this->setPublic();
-} else {
-$this->setPrivate();
-}
-}
-if (isset($options['private'])) {
-if ($options['private']) {
-$this->setPrivate();
-} else {
-$this->setPublic();
-}
-}
-return $this;
-}
-public function setNotModified()
-{
-$this->setStatusCode(304);
-$this->setContent(null);
-foreach (array('Allow','Content-Encoding','Content-Language','Content-Length','Content-MD5','Content-Type','Last-Modified') as $header) {
-$this->headers->remove($header);
-}
-return $this;
-}
-public function hasVary()
-{
-return null !== $this->headers->get('Vary');
-}
-public function getVary()
-{
-if (!$vary = $this->headers->get('Vary', null, false)) {
-return array();
-}
-$ret = array();
-foreach ($vary as $item) {
-$ret = array_merge($ret, preg_split('/[\s,]+/', $item));
-}
-return $ret;
-}
-public function setVary($headers, $replace = true)
-{
-$this->headers->set('Vary', $headers, $replace);
-return $this;
-}
-public function isNotModified(Request $request)
-{
-if (!$request->isMethodCacheable()) {
-return false;
-}
-$notModified = false;
-$lastModified = $this->headers->get('Last-Modified');
-$modifiedSince = $request->headers->get('If-Modified-Since');
-if ($etags = $request->getETags()) {
-$notModified = in_array($this->getEtag(), $etags) || in_array('*', $etags);
-}
-if ($modifiedSince && $lastModified) {
-$notModified = strtotime($modifiedSince) >= strtotime($lastModified) && (!$etags || $notModified);
-}
-if ($notModified) {
-$this->setNotModified();
-}
-return $notModified;
-}
-public function isInvalid()
-{
-return $this->statusCode < 100 || $this->statusCode >= 600;
-}
-public function isInformational()
-{
-return $this->statusCode >= 100 && $this->statusCode < 200;
-}
-public function isSuccessful()
-{
-return $this->statusCode >= 200 && $this->statusCode < 300;
-}
-public function isRedirection()
-{
-return $this->statusCode >= 300 && $this->statusCode < 400;
-}
-public function isClientError()
-{
-return $this->statusCode >= 400 && $this->statusCode < 500;
-}
-public function isServerError()
-{
-return $this->statusCode >= 500 && $this->statusCode < 600;
-}
-public function isOk()
-{
-return 200 === $this->statusCode;
-}
-public function isForbidden()
-{
-return 403 === $this->statusCode;
-}
-public function isNotFound()
-{
-return 404 === $this->statusCode;
-}
-public function isRedirect($location = null)
-{
-return in_array($this->statusCode, array(201, 301, 302, 303, 307, 308)) && (null === $location ?: $location == $this->headers->get('Location'));
-}
-public function isEmpty()
-{
-return in_array($this->statusCode, array(204, 304));
-}
-public static function closeOutputBuffers($targetLevel, $flush)
-{
-$status = ob_get_status(true);
-$level = count($status);
-$flags = defined('PHP_OUTPUT_HANDLER_REMOVABLE') ? PHP_OUTPUT_HANDLER_REMOVABLE | ($flush ? PHP_OUTPUT_HANDLER_FLUSHABLE : PHP_OUTPUT_HANDLER_CLEANABLE) : -1;
-while ($level-- > $targetLevel && ($s = $status[$level]) && (!isset($s['del']) ? !isset($s['flags']) || $flags === ($s['flags'] & $flags) : $s['del'])) {
-if ($flush) {
-ob_end_flush();
-} else {
-ob_end_clean();
-}
-}
-}
-protected function ensureIEOverSSLCompatibility(Request $request)
-{
-if (false !== stripos($this->headers->get('Content-Disposition'),'attachment') && preg_match('/MSIE (.*?);/i', $request->server->get('HTTP_USER_AGENT'), $match) == 1 && true === $request->isSecure()) {
-if ((int) preg_replace('/(MSIE )(.*?);/','$2', $match[0]) < 9) {
-$this->headers->remove('Cache-Control');
-}
-}
-}
-}
-}
-namespace Symfony\Component\HttpFoundation
-{
-class ResponseHeaderBag extends HeaderBag
-{
-const COOKIES_FLAT ='flat';
-const COOKIES_ARRAY ='array';
-const DISPOSITION_ATTACHMENT ='attachment';
-const DISPOSITION_INLINE ='inline';
-protected $computedCacheControl = array();
-protected $cookies = array();
-protected $headerNames = array();
-public function __construct(array $headers = array())
-{
-parent::__construct($headers);
-if (!isset($this->headers['cache-control'])) {
-$this->set('Cache-Control','');
-}
-}
-public function __toString()
-{
-$cookies ='';
-foreach ($this->getCookies() as $cookie) {
-$cookies .='Set-Cookie: '.$cookie."\r\n";
-}
-ksort($this->headerNames);
-return parent::__toString().$cookies;
-}
-public function allPreserveCase()
-{
-return array_combine($this->headerNames, $this->headers);
-}
-public function replace(array $headers = array())
-{
-$this->headerNames = array();
-parent::replace($headers);
-if (!isset($this->headers['cache-control'])) {
-$this->set('Cache-Control','');
-}
-}
-public function set($key, $values, $replace = true)
-{
-parent::set($key, $values, $replace);
-$uniqueKey = str_replace('_','-', strtolower($key));
-$this->headerNames[$uniqueKey] = $key;
-if (in_array($uniqueKey, array('cache-control','etag','last-modified','expires'))) {
-$computed = $this->computeCacheControlValue();
-$this->headers['cache-control'] = array($computed);
-$this->headerNames['cache-control'] ='Cache-Control';
-$this->computedCacheControl = $this->parseCacheControl($computed);
-}
-}
-public function remove($key)
-{
-parent::remove($key);
-$uniqueKey = str_replace('_','-', strtolower($key));
-unset($this->headerNames[$uniqueKey]);
-if ('cache-control'=== $uniqueKey) {
-$this->computedCacheControl = array();
-}
-}
-public function hasCacheControlDirective($key)
-{
-return array_key_exists($key, $this->computedCacheControl);
-}
-public function getCacheControlDirective($key)
-{
-return array_key_exists($key, $this->computedCacheControl) ? $this->computedCacheControl[$key] : null;
-}
-public function setCookie(Cookie $cookie)
-{
-$this->cookies[$cookie->getDomain()][$cookie->getPath()][$cookie->getName()] = $cookie;
-}
-public function removeCookie($name, $path ='/', $domain = null)
-{
-if (null === $path) {
-$path ='/';
-}
-unset($this->cookies[$domain][$path][$name]);
-if (empty($this->cookies[$domain][$path])) {
-unset($this->cookies[$domain][$path]);
-if (empty($this->cookies[$domain])) {
-unset($this->cookies[$domain]);
-}
-}
-}
-public function getCookies($format = self::COOKIES_FLAT)
-{
-if (!in_array($format, array(self::COOKIES_FLAT, self::COOKIES_ARRAY))) {
-throw new \InvalidArgumentException(sprintf('Format "%s" invalid (%s).', $format, implode(', ', array(self::COOKIES_FLAT, self::COOKIES_ARRAY))));
-}
-if (self::COOKIES_ARRAY === $format) {
-return $this->cookies;
-}
-$flattenedCookies = array();
-foreach ($this->cookies as $path) {
-foreach ($path as $cookies) {
-foreach ($cookies as $cookie) {
-$flattenedCookies[] = $cookie;
-}
-}
-}
-return $flattenedCookies;
-}
-public function clearCookie($name, $path ='/', $domain = null, $secure = false, $httpOnly = true)
-{
-$this->setCookie(new Cookie($name, null, 1, $path, $domain, $secure, $httpOnly));
-}
-public function makeDisposition($disposition, $filename, $filenameFallback ='')
-{
-if (!in_array($disposition, array(self::DISPOSITION_ATTACHMENT, self::DISPOSITION_INLINE))) {
-throw new \InvalidArgumentException(sprintf('The disposition must be either "%s" or "%s".', self::DISPOSITION_ATTACHMENT, self::DISPOSITION_INLINE));
-}
-if (''== $filenameFallback) {
-$filenameFallback = $filename;
-}
-if (!preg_match('/^[\x20-\x7e]*$/', $filenameFallback)) {
-throw new \InvalidArgumentException('The filename fallback must only contain ASCII characters.');
-}
-if (false !== strpos($filenameFallback,'%')) {
-throw new \InvalidArgumentException('The filename fallback cannot contain the "%" character.');
-}
-if (false !== strpos($filename,'/') || false !== strpos($filename,'\\') || false !== strpos($filenameFallback,'/') || false !== strpos($filenameFallback,'\\')) {
-throw new \InvalidArgumentException('The filename and the fallback cannot contain the "/" and "\\" characters.');
-}
-$output = sprintf('%s; filename="%s"', $disposition, str_replace('"','\\"', $filenameFallback));
-if ($filename !== $filenameFallback) {
-$output .= sprintf("; filename*=utf-8''%s", rawurlencode($filename));
-}
-return $output;
-}
-protected function computeCacheControlValue()
-{
-if (!$this->cacheControl && !$this->has('ETag') && !$this->has('Last-Modified') && !$this->has('Expires')) {
-return'no-cache, private';
-}
-if (!$this->cacheControl) {
-return'private, must-revalidate';
-}
-$header = $this->getCacheControlHeader();
-if (isset($this->cacheControl['public']) || isset($this->cacheControl['private'])) {
-return $header;
-}
-if (!isset($this->cacheControl['s-maxage'])) {
-return $header.', private';
-}
-return $header;
-}
-}
-}
-namespace Symfony\Component\HttpFoundation\Session
-{
-use Symfony\Component\HttpFoundation\Session\Storage\MetadataBag;
-interface SessionInterface
-{
-public function start();
-public function getId();
-public function setId($id);
-public function getName();
-public function setName($name);
-public function invalidate($lifetime = null);
-public function migrate($destroy = false, $lifetime = null);
-public function save();
-public function has($name);
-public function get($name, $default = null);
-public function set($name, $value);
-public function all();
-public function replace(array $attributes);
-public function remove($name);
-public function clear();
-public function isStarted();
-public function registerBag(SessionBagInterface $bag);
-public function getBag($name);
-public function getMetadataBag();
-}
-}
-namespace Symfony\Component\HttpFoundation\Session
-{
-use Symfony\Component\HttpFoundation\Session\Storage\SessionStorageInterface;
-use Symfony\Component\HttpFoundation\Session\Attribute\AttributeBag;
-use Symfony\Component\HttpFoundation\Session\Attribute\AttributeBagInterface;
-use Symfony\Component\HttpFoundation\Session\Flash\FlashBag;
-use Symfony\Component\HttpFoundation\Session\Flash\FlashBagInterface;
-use Symfony\Component\HttpFoundation\Session\Storage\NativeSessionStorage;
-class Session implements SessionInterface, \IteratorAggregate, \Countable
-{
-protected $storage;
-private $flashName;
-private $attributeName;
-public function __construct(SessionStorageInterface $storage = null, AttributeBagInterface $attributes = null, FlashBagInterface $flashes = null)
-{
-$this->storage = $storage ?: new NativeSessionStorage();
-$attributes = $attributes ?: new AttributeBag();
-$this->attributeName = $attributes->getName();
-$this->registerBag($attributes);
-$flashes = $flashes ?: new FlashBag();
-$this->flashName = $flashes->getName();
-$this->registerBag($flashes);
-}
-public function start()
-{
-return $this->storage->start();
-}
-public function has($name)
-{
-return $this->storage->getBag($this->attributeName)->has($name);
-}
-public function get($name, $default = null)
-{
-return $this->storage->getBag($this->attributeName)->get($name, $default);
-}
-public function set($name, $value)
-{
-$this->storage->getBag($this->attributeName)->set($name, $value);
-}
-public function all()
-{
-return $this->storage->getBag($this->attributeName)->all();
-}
-public function replace(array $attributes)
-{
-$this->storage->getBag($this->attributeName)->replace($attributes);
-}
-public function remove($name)
-{
-return $this->storage->getBag($this->attributeName)->remove($name);
-}
-public function clear()
-{
-$this->storage->getBag($this->attributeName)->clear();
-}
-public function isStarted()
-{
-return $this->storage->isStarted();
-}
-public function getIterator()
-{
-return new \ArrayIterator($this->storage->getBag($this->attributeName)->all());
-}
-public function count()
-{
-return count($this->storage->getBag($this->attributeName)->all());
-}
-public function invalidate($lifetime = null)
-{
-$this->storage->clear();
-return $this->migrate(true, $lifetime);
-}
-public function migrate($destroy = false, $lifetime = null)
-{
-return $this->storage->regenerate($destroy, $lifetime);
-}
-public function save()
-{
-$this->storage->save();
-}
-public function getId()
-{
-return $this->storage->getId();
-}
-public function setId($id)
-{
-$this->storage->setId($id);
-}
-public function getName()
-{
-return $this->storage->getName();
-}
-public function setName($name)
-{
-$this->storage->setName($name);
-}
-public function getMetadataBag()
-{
-return $this->storage->getMetadataBag();
-}
-public function registerBag(SessionBagInterface $bag)
-{
-$this->storage->registerBag($bag);
-}
-public function getBag($name)
-{
-return $this->storage->getBag($name);
-}
-public function getFlashBag()
-{
-return $this->getBag($this->flashName);
-}
-}
-}
-namespace Symfony\Component\HttpFoundation\Session\Storage\Handler
-{
-class NativeSessionHandler extends \SessionHandler
-{
-}
-}
-namespace Symfony\Component\HttpFoundation\Session\Storage\Handler
-{
-class NativeFileSessionHandler extends NativeSessionHandler
-{
-public function __construct($savePath = null)
-{
-if (null === $savePath) {
-$savePath = ini_get('session.save_path');
-}
-$baseDir = $savePath;
-if ($count = substr_count($savePath,';')) {
-if ($count > 2) {
-throw new \InvalidArgumentException(sprintf('Invalid argument $savePath \'%s\'', $savePath));
-}
-$baseDir = ltrim(strrchr($savePath,';'),';');
-}
-if ($baseDir && !is_dir($baseDir) && !@mkdir($baseDir, 0777, true) && !is_dir($baseDir)) {
-throw new \RuntimeException(sprintf('Session Storage was not able to create directory "%s"', $baseDir));
-}
-ini_set('session.save_path', $savePath);
-ini_set('session.save_handler','files');
-}
-}
-}
-namespace Symfony\Component\HttpFoundation\Session\Storage
-{
-use Symfony\Component\HttpFoundation\Session\SessionBagInterface;
-interface SessionStorageInterface
-{
-public function start();
-public function isStarted();
-public function getId();
-public function setId($id);
-public function getName();
-public function setName($name);
-public function regenerate($destroy = false, $lifetime = null);
-public function save();
-public function clear();
-public function getBag($name);
-public function registerBag(SessionBagInterface $bag);
-public function getMetadataBag();
-}
-}
-namespace Symfony\Component\HttpFoundation\Session\Storage
-{
-use Symfony\Component\HttpFoundation\Session\SessionBagInterface;
-use Symfony\Component\HttpFoundation\Session\Storage\Handler\NativeSessionHandler;
-use Symfony\Component\HttpFoundation\Session\Storage\Proxy\AbstractProxy;
-use Symfony\Component\HttpFoundation\Session\Storage\Proxy\SessionHandlerProxy;
-class NativeSessionStorage implements SessionStorageInterface
-{
-protected $bags;
-protected $started = false;
-protected $closed = false;
-protected $saveHandler;
-protected $metadataBag;
-public function __construct(array $options = array(), $handler = null, MetadataBag $metaBag = null)
-{
-session_cache_limiter(''); ini_set('session.use_cookies', 1);
-session_register_shutdown();
-$this->setMetadataBag($metaBag);
-$this->setOptions($options);
-$this->setSaveHandler($handler);
-}
-public function getSaveHandler()
-{
-return $this->saveHandler;
-}
-public function start()
-{
-if ($this->started) {
-return true;
-}
-if (\PHP_SESSION_ACTIVE === session_status()) {
-throw new \RuntimeException('Failed to start the session: already started by PHP.');
-}
-if (ini_get('session.use_cookies') && headers_sent($file, $line)) {
-throw new \RuntimeException(sprintf('Failed to start the session because headers have already been sent by "%s" at line %d.', $file, $line));
-}
-if (!session_start()) {
-throw new \RuntimeException('Failed to start the session');
-}
-$this->loadSession();
-return true;
-}
-public function getId()
-{
-return $this->saveHandler->getId();
-}
-public function setId($id)
-{
-$this->saveHandler->setId($id);
-}
-public function getName()
-{
-return $this->saveHandler->getName();
-}
-public function setName($name)
-{
-$this->saveHandler->setName($name);
-}
-public function regenerate($destroy = false, $lifetime = null)
-{
-if (\PHP_SESSION_ACTIVE !== session_status()) {
-return false;
-}
-if (null !== $lifetime) {
-ini_set('session.cookie_lifetime', $lifetime);
-}
-if ($destroy) {
-$this->metadataBag->stampNew();
-}
-$isRegenerated = session_regenerate_id($destroy);
-$this->loadSession();
-return $isRegenerated;
-}
-public function save()
-{
-session_write_close();
-$this->closed = true;
-$this->started = false;
-}
-public function clear()
-{
-foreach ($this->bags as $bag) {
-$bag->clear();
-}
-$_SESSION = array();
-$this->loadSession();
-}
-public function registerBag(SessionBagInterface $bag)
-{
-if ($this->started) {
-throw new \LogicException('Cannot register a bag when the session is already started.');
-}
-$this->bags[$bag->getName()] = $bag;
-}
-public function getBag($name)
-{
-if (!isset($this->bags[$name])) {
-throw new \InvalidArgumentException(sprintf('The SessionBagInterface %s is not registered.', $name));
-}
-if ($this->saveHandler->isActive() && !$this->started) {
-$this->loadSession();
-} elseif (!$this->started) {
-$this->start();
-}
-return $this->bags[$name];
-}
-public function setMetadataBag(MetadataBag $metaBag = null)
-{
-if (null === $metaBag) {
-$metaBag = new MetadataBag();
-}
-$this->metadataBag = $metaBag;
-}
-public function getMetadataBag()
-{
-return $this->metadataBag;
-}
-public function isStarted()
-{
-return $this->started;
-}
-public function setOptions(array $options)
-{
-$validOptions = array_flip(array('cache_limiter','cookie_domain','cookie_httponly','cookie_lifetime','cookie_path','cookie_secure','entropy_file','entropy_length','gc_divisor','gc_maxlifetime','gc_probability','hash_bits_per_character','hash_function','name','referer_check','serialize_handler','use_cookies','use_only_cookies','use_trans_sid','upload_progress.enabled','upload_progress.cleanup','upload_progress.prefix','upload_progress.name','upload_progress.freq','upload_progress.min-freq','url_rewriter.tags',
-));
-foreach ($options as $key => $value) {
-if (isset($validOptions[$key])) {
-ini_set('session.'.$key, $value);
-}
-}
-}
-public function setSaveHandler($saveHandler = null)
-{
-if (!$saveHandler instanceof AbstractProxy &&
-!$saveHandler instanceof NativeSessionHandler &&
-!$saveHandler instanceof \SessionHandlerInterface &&
-null !== $saveHandler) {
-throw new \InvalidArgumentException('Must be instance of AbstractProxy or NativeSessionHandler; implement \SessionHandlerInterface; or be null.');
-}
-if (!$saveHandler instanceof AbstractProxy && $saveHandler instanceof \SessionHandlerInterface) {
-$saveHandler = new SessionHandlerProxy($saveHandler);
-} elseif (!$saveHandler instanceof AbstractProxy) {
-$saveHandler = new SessionHandlerProxy(new \SessionHandler());
-}
-$this->saveHandler = $saveHandler;
-if ($this->saveHandler instanceof \SessionHandlerInterface) {
-session_set_save_handler($this->saveHandler, false);
-}
-}
-protected function loadSession(array &$session = null)
-{
-if (null === $session) {
-$session = &$_SESSION;
-}
-$bags = array_merge($this->bags, array($this->metadataBag));
-foreach ($bags as $bag) {
-$key = $bag->getStorageKey();
-$session[$key] = isset($session[$key]) ? $session[$key] : array();
-$bag->initialize($session[$key]);
-}
-$this->started = true;
-$this->closed = false;
-}
-}
-}
-namespace Symfony\Component\HttpFoundation\Session\Storage
-{
-use Symfony\Component\HttpFoundation\Session\Storage\Proxy\AbstractProxy;
-use Symfony\Component\HttpFoundation\Session\Storage\Handler\NativeSessionHandler;
-class PhpBridgeSessionStorage extends NativeSessionStorage
-{
-public function __construct($handler = null, MetadataBag $metaBag = null)
-{
-$this->setMetadataBag($metaBag);
-$this->setSaveHandler($handler);
-}
-public function start()
-{
-if ($this->started) {
-return true;
-}
-$this->loadSession();
-return true;
-}
-public function clear()
-{
-foreach ($this->bags as $bag) {
-$bag->clear();
-}
-$this->loadSession();
-}
-}
-}
-namespace Symfony\Component\HttpFoundation\Session\Storage\Proxy
-{
-abstract class AbstractProxy
-{
-protected $wrapper = false;
-protected $saveHandlerName;
-public function getSaveHandlerName()
-{
-return $this->saveHandlerName;
-}
-public function isSessionHandlerInterface()
-{
-return $this instanceof \SessionHandlerInterface;
-}
-public function isWrapper()
-{
-return $this->wrapper;
-}
-public function isActive()
-{
-return \PHP_SESSION_ACTIVE === session_status();
-}
-public function getId()
-{
-return session_id();
-}
-public function setId($id)
-{
-if ($this->isActive()) {
-throw new \LogicException('Cannot change the ID of an active session');
-}
-session_id($id);
-}
-public function getName()
-{
-return session_name();
-}
-public function setName($name)
-{
-if ($this->isActive()) {
-throw new \LogicException('Cannot change the name of an active session');
-}
-session_name($name);
-}
-}
-}
-namespace Symfony\Component\HttpFoundation\Session\Storage\Proxy
-{
-class SessionHandlerProxy extends AbstractProxy implements \SessionHandlerInterface
-{
-protected $handler;
-public function __construct(\SessionHandlerInterface $handler)
-{
-$this->handler = $handler;
-$this->wrapper = ($handler instanceof \SessionHandler);
-$this->saveHandlerName = $this->wrapper ? ini_get('session.save_handler') :'user';
-}
-public function open($savePath, $sessionName)
-{
-return (bool) $this->handler->open($savePath, $sessionName);
-}
-public function close()
-{
-return (bool) $this->handler->close();
-}
-public function read($sessionId)
-{
-return (string) $this->handler->read($sessionId);
-}
-public function write($sessionId, $data)
-{
-return (bool) $this->handler->write($sessionId, $data);
-}
-public function destroy($sessionId)
-{
-return (bool) $this->handler->destroy($sessionId);
-}
-public function gc($maxlifetime)
-{
-return (bool) $this->handler->gc($maxlifetime);
-}
-}
-}
-namespace Symfony\Component\HttpKernel\Bundle
-{
-use Symfony\Component\DependencyInjection\ContainerAwareInterface;
-use Symfony\Component\DependencyInjection\ContainerBuilder;
-use Symfony\Component\DependencyInjection\Extension\ExtensionInterface;
-interface BundleInterface extends ContainerAwareInterface
-{
-public function boot();
-public function shutdown();
-public function build(ContainerBuilder $container);
-public function getContainerExtension();
-public function getParent();
-public function getName();
-public function getNamespace();
-public function getPath();
-}
-}
-namespace Symfony\Component\HttpKernel\Bundle
-{
-use Symfony\Component\DependencyInjection\ContainerAwareTrait;
-use Symfony\Component\DependencyInjection\ContainerBuilder;
-use Symfony\Component\DependencyInjection\Container;
-use Symfony\Component\Console\Application;
-use Symfony\Component\Finder\Finder;
-use Symfony\Component\DependencyInjection\Extension\ExtensionInterface;
-abstract class Bundle implements BundleInterface
-{
-use ContainerAwareTrait;
-protected $name;
-protected $extension;
-protected $path;
-private $namespace;
-public function boot()
-{
-}
-public function shutdown()
-{
-}
-public function build(ContainerBuilder $container)
-{
-}
-public function getContainerExtension()
-{
-if (null === $this->extension) {
-$extension = $this->createContainerExtension();
-if (null !== $extension) {
-if (!$extension instanceof ExtensionInterface) {
-throw new \LogicException(sprintf('Extension %s must implement Symfony\Component\DependencyInjection\Extension\ExtensionInterface.', get_class($extension)));
-}
-$basename = preg_replace('/Bundle$/','', $this->getName());
-$expectedAlias = Container::underscore($basename);
-if ($expectedAlias != $extension->getAlias()) {
-throw new \LogicException(sprintf('Users will expect the alias of the default extension of a bundle to be the underscored version of the bundle name ("%s"). You can override "Bundle::getContainerExtension()" if you want to use "%s" or another alias.',
-$expectedAlias, $extension->getAlias()
-));
-}
-$this->extension = $extension;
-} else {
-$this->extension = false;
-}
-}
-if ($this->extension) {
-return $this->extension;
-}
-}
-public function getNamespace()
-{
-if (null === $this->namespace) {
-$this->parseClassName();
-}
-return $this->namespace;
-}
-public function getPath()
-{
-if (null === $this->path) {
-$reflected = new \ReflectionObject($this);
-$this->path = dirname($reflected->getFileName());
-}
-return $this->path;
-}
-public function getParent()
-{
-}
-final public function getName()
-{
-if (null === $this->name) {
-$this->parseClassName();
-}
-return $this->name;
-}
-public function registerCommands(Application $application)
-{
-if (!is_dir($dir = $this->getPath().'/Command')) {
-return;
-}
-if (!class_exists('Symfony\Component\Finder\Finder')) {
-throw new \RuntimeException('You need the symfony/finder component to register bundle commands.');
-}
-$finder = new Finder();
-$finder->files()->name('*Command.php')->in($dir);
-$prefix = $this->getNamespace().'\\Command';
-foreach ($finder as $file) {
-$ns = $prefix;
-if ($relativePath = $file->getRelativePath()) {
-$ns .='\\'.str_replace('/','\\', $relativePath);
-}
-$class = $ns.'\\'.$file->getBasename('.php');
-if ($this->container) {
-$alias ='console.command.'.strtolower(str_replace('\\','_', $class));
-if ($this->container->has($alias)) {
-continue;
-}
-}
-$r = new \ReflectionClass($class);
-if ($r->isSubclassOf('Symfony\\Component\\Console\\Command\\Command') && !$r->isAbstract() && !$r->getConstructor()->getNumberOfRequiredParameters()) {
-$application->add($r->newInstance());
-}
-}
-}
-protected function getContainerExtensionClass()
-{
-$basename = preg_replace('/Bundle$/','', $this->getName());
-return $this->getNamespace().'\\DependencyInjection\\'.$basename.'Extension';
-}
-protected function createContainerExtension()
-{
-if (class_exists($class = $this->getContainerExtensionClass())) {
-return new $class();
-}
-}
-private function parseClassName()
-{
-$pos = strrpos(static::class,'\\');
-$this->namespace = false === $pos ?'': substr(static::class, 0, $pos);
-$this->name = false === $pos ? static::class : substr(static::class, $pos + 1);
-}
-}
-}
-namespace Symfony\Component\HttpKernel\Config
-{
-use Symfony\Component\Config\FileLocator as BaseFileLocator;
-use Symfony\Component\HttpKernel\KernelInterface;
-class FileLocator extends BaseFileLocator
-{
-private $kernel;
-private $path;
-public function __construct(KernelInterface $kernel, $path = null, array $paths = array())
-{
-$this->kernel = $kernel;
-if (null !== $path) {
-$this->path = $path;
-$paths[] = $path;
-}
-parent::__construct($paths);
-}
-public function locate($file, $currentPath = null, $first = true)
-{
-if (isset($file[0]) &&'@'=== $file[0]) {
-return $this->kernel->locateResource($file, $this->path, $first);
-}
-return parent::locate($file, $currentPath, $first);
-}
-}
-}
-namespace Symfony\Component\HttpKernel\ControllerMetadata
-{
-class ArgumentMetadata
-{
-private $name;
-private $type;
-private $isVariadic;
-private $hasDefaultValue;
-private $defaultValue;
-private $isNullable;
-public function __construct($name, $type, $isVariadic, $hasDefaultValue, $defaultValue, $isNullable = false)
-{
-$this->name = $name;
-$this->type = $type;
-$this->isVariadic = $isVariadic;
-$this->hasDefaultValue = $hasDefaultValue;
-$this->defaultValue = $defaultValue;
-$this->isNullable = $isNullable || null === $type || ($hasDefaultValue && null === $defaultValue);
-}
-public function getName()
-{
-return $this->name;
-}
-public function getType()
-{
-return $this->type;
-}
-public function isVariadic()
-{
-return $this->isVariadic;
-}
-public function hasDefaultValue()
-{
-return $this->hasDefaultValue;
-}
-public function isNullable()
-{
-return $this->isNullable;
-}
-public function getDefaultValue()
-{
-if (!$this->hasDefaultValue) {
-throw new \LogicException(sprintf('Argument $%s does not have a default value. Use %s::hasDefaultValue() to avoid this exception.', $this->name, __CLASS__));
-}
-return $this->defaultValue;
-}
-}
-}
-namespace Symfony\Component\HttpKernel\ControllerMetadata
-{
-interface ArgumentMetadataFactoryInterface
-{
-public function createArgumentMetadata($controller);
-}
-}
-namespace Symfony\Component\HttpKernel\ControllerMetadata
-{
-final class ArgumentMetadataFactory implements ArgumentMetadataFactoryInterface
-{
-private $supportsVariadic;
-private $supportsParameterType;
-public function __construct()
-{
-$this->supportsVariadic = method_exists('ReflectionParameter','isVariadic');
-$this->supportsParameterType = method_exists('ReflectionParameter','getType');
-}
-public function createArgumentMetadata($controller)
-{
-$arguments = array();
-if (is_array($controller)) {
-$reflection = new \ReflectionMethod($controller[0], $controller[1]);
-} elseif (is_object($controller) && !$controller instanceof \Closure) {
-$reflection = (new \ReflectionObject($controller))->getMethod('__invoke');
-} else {
-$reflection = new \ReflectionFunction($controller);
-}
-foreach ($reflection->getParameters() as $param) {
-$arguments[] = new ArgumentMetadata($param->getName(), $this->getType($param), $this->isVariadic($param), $this->hasDefaultValue($param), $this->getDefaultValue($param), $param->allowsNull());
-}
-return $arguments;
-}
-private function isVariadic(\ReflectionParameter $parameter)
-{
-return $this->supportsVariadic && $parameter->isVariadic();
-}
-private function hasDefaultValue(\ReflectionParameter $parameter)
-{
-return $parameter->isDefaultValueAvailable();
-}
-private function getDefaultValue(\ReflectionParameter $parameter)
-{
-return $this->hasDefaultValue($parameter) ? $parameter->getDefaultValue() : null;
-}
-private function getType(\ReflectionParameter $parameter)
-{
-if ($this->supportsParameterType) {
-if (!$type = $parameter->getType()) {
-return;
-}
-$typeName = $type instanceof \ReflectionNamedType ? $type->getName() : $type->__toString();
-if ('array'=== $typeName && !$type->isBuiltin()) {
-return;
-}
-return $typeName;
-}
-if (preg_match('/^(?:[^ ]++ ){4}([a-zA-Z_\x7F-\xFF][^ ]++)/', $parameter, $info)) {
-return $info[1];
-}
-}
-}
-}
-namespace Symfony\Component\HttpKernel\Controller
-{
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpKernel\Controller\ArgumentResolver\DefaultValueResolver;
-use Symfony\Component\HttpKernel\Controller\ArgumentResolver\RequestAttributeValueResolver;
-use Symfony\Component\HttpKernel\Controller\ArgumentResolver\RequestValueResolver;
-use Symfony\Component\HttpKernel\Controller\ArgumentResolver\VariadicValueResolver;
-use Symfony\Component\HttpKernel\ControllerMetadata\ArgumentMetadataFactory;
-use Symfony\Component\HttpKernel\ControllerMetadata\ArgumentMetadataFactoryInterface;
-final class ArgumentResolver implements ArgumentResolverInterface
-{
-private $argumentMetadataFactory;
-private $argumentValueResolvers;
-public function __construct(ArgumentMetadataFactoryInterface $argumentMetadataFactory = null, array $argumentValueResolvers = array())
-{
-$this->argumentMetadataFactory = $argumentMetadataFactory ?: new ArgumentMetadataFactory();
-$this->argumentValueResolvers = $argumentValueResolvers ?: self::getDefaultArgumentValueResolvers();
-}
-public function getArguments(Request $request, $controller)
-{
-$arguments = array();
-foreach ($this->argumentMetadataFactory->createArgumentMetadata($controller) as $metadata) {
-foreach ($this->argumentValueResolvers as $resolver) {
-if (!$resolver->supports($request, $metadata)) {
-continue;
-}
-$resolved = $resolver->resolve($request, $metadata);
-if (!$resolved instanceof \Generator) {
-throw new \InvalidArgumentException(sprintf('%s::resolve() must yield at least one value.', get_class($resolver)));
-}
-foreach ($resolved as $append) {
-$arguments[] = $append;
-}
-continue 2;
-}
-$representative = $controller;
-if (is_array($representative)) {
-$representative = sprintf('%s::%s()', get_class($representative[0]), $representative[1]);
-} elseif (is_object($representative)) {
-$representative = get_class($representative);
-}
-throw new \RuntimeException(sprintf('Controller "%s" requires that you provide a value for the "$%s" argument. Either the argument is nullable and no null value has been provided, no default value has been provided or because there is a non optional argument after this one.', $representative, $metadata->getName()));
-}
-return $arguments;
-}
-public static function getDefaultArgumentValueResolvers()
-{
-return array(
-new RequestAttributeValueResolver(),
-new RequestValueResolver(),
-new DefaultValueResolver(),
-new VariadicValueResolver(),
-);
-}
-}
-}
 namespace Symfony\Component\HttpKernel\EventListener
 {
 use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
@@ -7229,6 +2389,334 @@ return array(
 KernelEvents::REQUEST => array(array('onKernelRequest', 32)),
 KernelEvents::FINISH_REQUEST => array(array('onKernelFinishRequest', 0)),
 );
+}
+}
+}
+namespace Symfony\Component\HttpKernel\Controller
+{
+use Symfony\Component\HttpFoundation\Request;
+interface ArgumentResolverInterface
+{
+public function getArguments(Request $request, $controller);
+}
+}
+namespace Symfony\Component\HttpKernel\Controller
+{
+use Symfony\Component\HttpFoundation\Request;
+interface ControllerResolverInterface
+{
+public function getController(Request $request);
+public function getArguments(Request $request, $controller);
+}
+}
+namespace Symfony\Component\HttpKernel\Controller
+{
+use Psr\Log\LoggerInterface;
+use Symfony\Component\HttpFoundation\Request;
+class ControllerResolver implements ArgumentResolverInterface, ControllerResolverInterface
+{
+private $logger;
+private $supportsVariadic;
+public function __construct(LoggerInterface $logger = null)
+{
+$this->logger = $logger;
+$this->supportsVariadic = method_exists('ReflectionParameter','isVariadic');
+}
+public function getController(Request $request)
+{
+if (!$controller = $request->attributes->get('_controller')) {
+if (null !== $this->logger) {
+$this->logger->warning('Unable to look for the controller as the "_controller" parameter is missing.');
+}
+return false;
+}
+if (is_array($controller)) {
+return $controller;
+}
+if (is_object($controller)) {
+if (method_exists($controller,'__invoke')) {
+return $controller;
+}
+throw new \InvalidArgumentException(sprintf('Controller "%s" for URI "%s" is not callable.', get_class($controller), $request->getPathInfo()));
+}
+if (false === strpos($controller,':')) {
+if (method_exists($controller,'__invoke')) {
+return $this->instantiateController($controller);
+} elseif (function_exists($controller)) {
+return $controller;
+}
+}
+$callable = $this->createController($controller);
+if (!is_callable($callable)) {
+throw new \InvalidArgumentException(sprintf('The controller for URI "%s" is not callable. %s', $request->getPathInfo(), $this->getControllerError($callable)));
+}
+return $callable;
+}
+public function getArguments(Request $request, $controller)
+{
+@trigger_error(sprintf('%s is deprecated as of 3.1 and will be removed in 4.0. Implement the %s and inject it in the HttpKernel instead.', __METHOD__, ArgumentResolverInterface::class), E_USER_DEPRECATED);
+if (is_array($controller)) {
+$r = new \ReflectionMethod($controller[0], $controller[1]);
+} elseif (is_object($controller) && !$controller instanceof \Closure) {
+$r = new \ReflectionObject($controller);
+$r = $r->getMethod('__invoke');
+} else {
+$r = new \ReflectionFunction($controller);
+}
+return $this->doGetArguments($request, $controller, $r->getParameters());
+}
+protected function doGetArguments(Request $request, $controller, array $parameters)
+{
+@trigger_error(sprintf('%s is deprecated as of 3.1 and will be removed in 4.0. Implement the %s and inject it in the HttpKernel instead.', __METHOD__, ArgumentResolverInterface::class), E_USER_DEPRECATED);
+$attributes = $request->attributes->all();
+$arguments = array();
+foreach ($parameters as $param) {
+if (array_key_exists($param->name, $attributes)) {
+if ($this->supportsVariadic && $param->isVariadic() && is_array($attributes[$param->name])) {
+$arguments = array_merge($arguments, array_values($attributes[$param->name]));
+} else {
+$arguments[] = $attributes[$param->name];
+}
+} elseif ($param->getClass() && $param->getClass()->isInstance($request)) {
+$arguments[] = $request;
+} elseif ($param->isDefaultValueAvailable()) {
+$arguments[] = $param->getDefaultValue();
+} elseif ($param->allowsNull()) {
+$arguments[] = null;
+} else {
+if (is_array($controller)) {
+$repr = sprintf('%s::%s()', get_class($controller[0]), $controller[1]);
+} elseif (is_object($controller)) {
+$repr = get_class($controller);
+} else {
+$repr = $controller;
+}
+throw new \RuntimeException(sprintf('Controller "%s" requires that you provide a value for the "$%s" argument (because there is no default value or because there is a non optional argument after this one).', $repr, $param->name));
+}
+}
+return $arguments;
+}
+protected function createController($controller)
+{
+if (false === strpos($controller,'::')) {
+throw new \InvalidArgumentException(sprintf('Unable to find controller "%s".', $controller));
+}
+list($class, $method) = explode('::', $controller, 2);
+if (!class_exists($class)) {
+throw new \InvalidArgumentException(sprintf('Class "%s" does not exist.', $class));
+}
+return array($this->instantiateController($class), $method);
+}
+protected function instantiateController($class)
+{
+return new $class();
+}
+private function getControllerError($callable)
+{
+if (is_string($callable)) {
+if (false !== strpos($callable,'::')) {
+$callable = explode('::', $callable);
+}
+if (class_exists($callable) && !method_exists($callable,'__invoke')) {
+return sprintf('Class "%s" does not have a method "__invoke".', $callable);
+}
+if (!function_exists($callable)) {
+return sprintf('Function "%s" does not exist.', $callable);
+}
+}
+if (!is_array($callable)) {
+return sprintf('Invalid type for controller given, expected string or array, got "%s".', gettype($callable));
+}
+if (2 !== count($callable)) {
+return sprintf('Invalid format for controller, expected array(controller, method) or controller::method.');
+}
+list($controller, $method) = $callable;
+if (is_string($controller) && !class_exists($controller)) {
+return sprintf('Class "%s" does not exist.', $controller);
+}
+$className = is_object($controller) ? get_class($controller) : $controller;
+if (method_exists($controller, $method)) {
+return sprintf('Method "%s" on class "%s" should be public and non-abstract.', $method, $className);
+}
+$collection = get_class_methods($controller);
+$alternatives = array();
+foreach ($collection as $item) {
+$lev = levenshtein($method, $item);
+if ($lev <= strlen($method) / 3 || false !== strpos($item, $method)) {
+$alternatives[] = $item;
+}
+}
+asort($alternatives);
+$message = sprintf('Expected method "%s" on class "%s"', $method, $className);
+if (count($alternatives) > 0) {
+$message .= sprintf(', did you mean "%s"?', implode('", "', $alternatives));
+} else {
+$message .= sprintf('. Available methods: "%s".', implode('", "', $collection));
+}
+return $message;
+}
+}
+}
+namespace Symfony\Component\HttpKernel\Controller
+{
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Controller\ArgumentResolver\DefaultValueResolver;
+use Symfony\Component\HttpKernel\Controller\ArgumentResolver\RequestAttributeValueResolver;
+use Symfony\Component\HttpKernel\Controller\ArgumentResolver\RequestValueResolver;
+use Symfony\Component\HttpKernel\Controller\ArgumentResolver\VariadicValueResolver;
+use Symfony\Component\HttpKernel\ControllerMetadata\ArgumentMetadataFactory;
+use Symfony\Component\HttpKernel\ControllerMetadata\ArgumentMetadataFactoryInterface;
+final class ArgumentResolver implements ArgumentResolverInterface
+{
+private $argumentMetadataFactory;
+private $argumentValueResolvers;
+public function __construct(ArgumentMetadataFactoryInterface $argumentMetadataFactory = null, array $argumentValueResolvers = array())
+{
+$this->argumentMetadataFactory = $argumentMetadataFactory ?: new ArgumentMetadataFactory();
+$this->argumentValueResolvers = $argumentValueResolvers ?: array(
+new RequestAttributeValueResolver(),
+new RequestValueResolver(),
+new DefaultValueResolver(),
+new VariadicValueResolver(),
+);
+}
+public function getArguments(Request $request, $controller)
+{
+$arguments = array();
+foreach ($this->argumentMetadataFactory->createArgumentMetadata($controller) as $metadata) {
+foreach ($this->argumentValueResolvers as $resolver) {
+if (!$resolver->supports($request, $metadata)) {
+continue;
+}
+$resolved = $resolver->resolve($request, $metadata);
+if (!$resolved instanceof \Generator) {
+throw new \InvalidArgumentException(sprintf('%s::resolve() must yield at least one value.', get_class($resolver)));
+}
+foreach ($resolved as $append) {
+$arguments[] = $append;
+}
+continue 2;
+}
+$representative = $controller;
+if (is_array($representative)) {
+$representative = sprintf('%s::%s()', get_class($representative[0]), $representative[1]);
+} elseif (is_object($representative)) {
+$representative = get_class($representative);
+}
+throw new \RuntimeException(sprintf('Controller "%s" requires that you provide a value for the "$%s" argument. Either the argument is nullable and no null value has been provided, no default value has been provided or because there is a non optional argument after this one.', $representative, $metadata->getName()));
+}
+return $arguments;
+}
+}
+}
+namespace Symfony\Component\HttpKernel\ControllerMetadata
+{
+class ArgumentMetadata
+{
+private $name;
+private $type;
+private $isVariadic;
+private $hasDefaultValue;
+private $defaultValue;
+private $isNullable;
+public function __construct($name, $type, $isVariadic, $hasDefaultValue, $defaultValue, $isNullable = false)
+{
+$this->name = $name;
+$this->type = $type;
+$this->isVariadic = $isVariadic;
+$this->hasDefaultValue = $hasDefaultValue;
+$this->defaultValue = $defaultValue;
+$this->isNullable = $isNullable || null === $type || ($hasDefaultValue && null === $defaultValue);
+}
+public function getName()
+{
+return $this->name;
+}
+public function getType()
+{
+return $this->type;
+}
+public function isVariadic()
+{
+return $this->isVariadic;
+}
+public function hasDefaultValue()
+{
+return $this->hasDefaultValue;
+}
+public function isNullable()
+{
+return $this->isNullable;
+}
+public function getDefaultValue()
+{
+if (!$this->hasDefaultValue) {
+throw new \LogicException(sprintf('Argument $%s does not have a default value. Use %s::hasDefaultValue() to avoid this exception.', $this->name, __CLASS__));
+}
+return $this->defaultValue;
+}
+}
+}
+namespace Symfony\Component\HttpKernel\ControllerMetadata
+{
+interface ArgumentMetadataFactoryInterface
+{
+public function createArgumentMetadata($controller);
+}
+}
+namespace Symfony\Component\HttpKernel\ControllerMetadata
+{
+final class ArgumentMetadataFactory implements ArgumentMetadataFactoryInterface
+{
+private $supportsVariadic;
+private $supportsParameterType;
+public function __construct()
+{
+$this->supportsVariadic = method_exists('ReflectionParameter','isVariadic');
+$this->supportsParameterType = method_exists('ReflectionParameter','getType');
+}
+public function createArgumentMetadata($controller)
+{
+$arguments = array();
+if (is_array($controller)) {
+$reflection = new \ReflectionMethod($controller[0], $controller[1]);
+} elseif (is_object($controller) && !$controller instanceof \Closure) {
+$reflection = (new \ReflectionObject($controller))->getMethod('__invoke');
+} else {
+$reflection = new \ReflectionFunction($controller);
+}
+foreach ($reflection->getParameters() as $param) {
+$arguments[] = new ArgumentMetadata($param->getName(), $this->getType($param), $this->isVariadic($param), $this->hasDefaultValue($param), $this->getDefaultValue($param), $param->allowsNull());
+}
+return $arguments;
+}
+private function isVariadic(\ReflectionParameter $parameter)
+{
+return $this->supportsVariadic && $parameter->isVariadic();
+}
+private function hasDefaultValue(\ReflectionParameter $parameter)
+{
+return $parameter->isDefaultValueAvailable();
+}
+private function getDefaultValue(\ReflectionParameter $parameter)
+{
+return $this->hasDefaultValue($parameter) ? $parameter->getDefaultValue() : null;
+}
+private function getType(\ReflectionParameter $parameter)
+{
+if ($this->supportsParameterType) {
+if (!$type = $parameter->getType()) {
+return;
+}
+$typeName = $type instanceof \ReflectionNamedType ? $type->getName() : $type->__toString();
+if ('array'=== $typeName && !$type->isBuiltin()) {
+return;
+}
+return $typeName;
+}
+if (preg_match('/^(?:[^ ]++ ){4}([a-zA-Z_\x7F-\xFF][^ ]++)/', $parameter, $info)) {
+return $info[1];
+}
 }
 }
 }
@@ -7378,177 +2866,6 @@ $this->exception = $exception;
 }
 namespace Symfony\Component\HttpKernel
 {
-use Symfony\Component\HttpKernel\Controller\ArgumentResolver;
-use Symfony\Component\HttpKernel\Controller\ArgumentResolverInterface;
-use Symfony\Component\HttpKernel\Controller\ControllerResolverInterface;
-use Symfony\Component\HttpKernel\Event\FilterControllerArgumentsEvent;
-use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
-use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
-use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
-use Symfony\Component\HttpKernel\Event\FinishRequestEvent;
-use Symfony\Component\HttpKernel\Event\GetResponseEvent;
-use Symfony\Component\HttpKernel\Event\GetResponseForControllerResultEvent;
-use Symfony\Component\HttpKernel\Event\GetResponseForExceptionEvent;
-use Symfony\Component\HttpKernel\Event\PostResponseEvent;
-use Symfony\Component\HttpFoundation\Exception\ConflictingHeadersException;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\RequestStack;
-use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-class HttpKernel implements HttpKernelInterface, TerminableInterface
-{
-protected $dispatcher;
-protected $resolver;
-protected $requestStack;
-private $argumentResolver;
-public function __construct(EventDispatcherInterface $dispatcher, ControllerResolverInterface $resolver, RequestStack $requestStack = null, ArgumentResolverInterface $argumentResolver = null)
-{
-$this->dispatcher = $dispatcher;
-$this->resolver = $resolver;
-$this->requestStack = $requestStack ?: new RequestStack();
-$this->argumentResolver = $argumentResolver;
-if (null === $this->argumentResolver) {
-@trigger_error(sprintf('As of 3.1 an %s is used to resolve arguments. In 4.0 the $argumentResolver becomes the %s if no other is provided instead of using the $resolver argument.', ArgumentResolverInterface::class, ArgumentResolver::class), E_USER_DEPRECATED);
-$this->argumentResolver = $resolver;
-}
-}
-public function handle(Request $request, $type = HttpKernelInterface::MASTER_REQUEST, $catch = true)
-{
-$request->headers->set('X-Php-Ob-Level', ob_get_level());
-try {
-return $this->handleRaw($request, $type);
-} catch (\Exception $e) {
-if ($e instanceof ConflictingHeadersException) {
-$e = new BadRequestHttpException('The request headers contain conflicting information regarding the origin of this request.', $e);
-}
-if (false === $catch) {
-$this->finishRequest($request, $type);
-throw $e;
-}
-return $this->handleException($e, $request, $type);
-}
-}
-public function terminate(Request $request, Response $response)
-{
-$this->dispatcher->dispatch(KernelEvents::TERMINATE, new PostResponseEvent($this, $request, $response));
-}
-public function terminateWithException(\Exception $exception)
-{
-if (!$request = $this->requestStack->getMasterRequest()) {
-throw new \LogicException('Request stack is empty', 0, $exception);
-}
-$response = $this->handleException($exception, $request, self::MASTER_REQUEST);
-$response->sendHeaders();
-$response->sendContent();
-$this->terminate($request, $response);
-}
-private function handleRaw(Request $request, $type = self::MASTER_REQUEST)
-{
-$this->requestStack->push($request);
-$event = new GetResponseEvent($this, $request, $type);
-$this->dispatcher->dispatch(KernelEvents::REQUEST, $event);
-if ($event->hasResponse()) {
-return $this->filterResponse($event->getResponse(), $request, $type);
-}
-if (false === $controller = $this->resolver->getController($request)) {
-throw new NotFoundHttpException(sprintf('Unable to find the controller for path "%s". The route is wrongly configured.', $request->getPathInfo()));
-}
-$event = new FilterControllerEvent($this, $controller, $request, $type);
-$this->dispatcher->dispatch(KernelEvents::CONTROLLER, $event);
-$controller = $event->getController();
-$arguments = $this->argumentResolver->getArguments($request, $controller);
-$event = new FilterControllerArgumentsEvent($this, $controller, $arguments, $request, $type);
-$this->dispatcher->dispatch(KernelEvents::CONTROLLER_ARGUMENTS, $event);
-$controller = $event->getController();
-$arguments = $event->getArguments();
-$response = call_user_func_array($controller, $arguments);
-if (!$response instanceof Response) {
-$event = new GetResponseForControllerResultEvent($this, $request, $type, $response);
-$this->dispatcher->dispatch(KernelEvents::VIEW, $event);
-if ($event->hasResponse()) {
-$response = $event->getResponse();
-}
-if (!$response instanceof Response) {
-$msg = sprintf('The controller must return a response (%s given).', $this->varToString($response));
-if (null === $response) {
-$msg .=' Did you forget to add a return statement somewhere in your controller?';
-}
-throw new \LogicException($msg);
-}
-}
-return $this->filterResponse($response, $request, $type);
-}
-private function filterResponse(Response $response, Request $request, $type)
-{
-$event = new FilterResponseEvent($this, $request, $type, $response);
-$this->dispatcher->dispatch(KernelEvents::RESPONSE, $event);
-$this->finishRequest($request, $type);
-return $event->getResponse();
-}
-private function finishRequest(Request $request, $type)
-{
-$this->dispatcher->dispatch(KernelEvents::FINISH_REQUEST, new FinishRequestEvent($this, $request, $type));
-$this->requestStack->pop();
-}
-private function handleException(\Exception $e, $request, $type)
-{
-$event = new GetResponseForExceptionEvent($this, $request, $type, $e);
-$this->dispatcher->dispatch(KernelEvents::EXCEPTION, $event);
-$e = $event->getException();
-if (!$event->hasResponse()) {
-$this->finishRequest($request, $type);
-throw $e;
-}
-$response = $event->getResponse();
-if ($response->headers->has('X-Status-Code')) {
-$response->setStatusCode($response->headers->get('X-Status-Code'));
-$response->headers->remove('X-Status-Code');
-} elseif (!$response->isClientError() && !$response->isServerError() && !$response->isRedirect()) {
-if ($e instanceof HttpExceptionInterface) {
-$response->setStatusCode($e->getStatusCode());
-$response->headers->add($e->getHeaders());
-} else {
-$response->setStatusCode(500);
-}
-}
-try {
-return $this->filterResponse($response, $request, $type);
-} catch (\Exception $e) {
-return $response;
-}
-}
-private function varToString($var)
-{
-if (is_object($var)) {
-return sprintf('Object(%s)', get_class($var));
-}
-if (is_array($var)) {
-$a = array();
-foreach ($var as $k => $v) {
-$a[] = sprintf('%s => %s', $k, $this->varToString($v));
-}
-return sprintf('Array(%s)', implode(', ', $a));
-}
-if (is_resource($var)) {
-return sprintf('Resource(%s)', get_resource_type($var));
-}
-if (null === $var) {
-return'null';
-}
-if (false === $var) {
-return'false';
-}
-if (true === $var) {
-return'true';
-}
-return (string) $var;
-}
-}
-}
-namespace Symfony\Component\HttpKernel
-{
 final class KernelEvents
 {
 const REQUEST ='kernel.request';
@@ -7561,324 +2878,220 @@ const TERMINATE ='kernel.terminate';
 const FINISH_REQUEST ='kernel.finish_request';
 }
 }
-namespace Symfony\Component\Routing\Generator
+namespace Symfony\Component\HttpKernel\Config
 {
-interface ConfigurableRequirementsInterface
+use Symfony\Component\Config\FileLocator as BaseFileLocator;
+use Symfony\Component\HttpKernel\KernelInterface;
+class FileLocator extends BaseFileLocator
 {
-public function setStrictRequirements($enabled);
-public function isStrictRequirements();
+private $kernel;
+private $path;
+public function __construct(KernelInterface $kernel, $path = null, array $paths = array())
+{
+$this->kernel = $kernel;
+if (null !== $path) {
+$this->path = $path;
+$paths[] = $path;
+}
+parent::__construct($paths);
+}
+public function locate($file, $currentPath = null, $first = true)
+{
+if (isset($file[0]) &&'@'=== $file[0]) {
+return $this->kernel->locateResource($file, $this->path, $first);
+}
+return parent::locate($file, $currentPath, $first);
 }
 }
-namespace Symfony\Component\Routing\Generator
+}
+namespace Symfony\Bundle\FrameworkBundle\Controller
 {
-use Symfony\Component\Routing\RouteCollection;
-use Symfony\Component\Routing\RequestContext;
-use Symfony\Component\Routing\Exception\InvalidParameterException;
-use Symfony\Component\Routing\Exception\RouteNotFoundException;
-use Symfony\Component\Routing\Exception\MissingMandatoryParametersException;
-use Psr\Log\LoggerInterface;
-class UrlGenerator implements UrlGeneratorInterface, ConfigurableRequirementsInterface
+use Symfony\Component\HttpKernel\KernelInterface;
+class ControllerNameParser
 {
-protected $routes;
-protected $context;
-protected $strictRequirements = true;
-protected $logger;
-protected $decodedChars = array('%2F'=>'/','%40'=>'@','%3A'=>':','%3B'=>';','%2C'=>',','%3D'=>'=','%2B'=>'+','%21'=>'!','%2A'=>'*','%7C'=>'|',
+protected $kernel;
+public function __construct(KernelInterface $kernel)
+{
+$this->kernel = $kernel;
+}
+public function parse($controller)
+{
+$originalController = $controller;
+if (3 !== count($parts = explode(':', $controller))) {
+throw new \InvalidArgumentException(sprintf('The "%s" controller is not a valid "a:b:c" controller string.', $controller));
+}
+list($bundle, $controller, $action) = $parts;
+$controller = str_replace('/','\\', $controller);
+$bundles = array();
+try {
+$allBundles = $this->kernel->getBundle($bundle, false);
+} catch (\InvalidArgumentException $e) {
+$message = sprintf('The "%s" (from the _controller value "%s") does not exist or is not enabled in your kernel!',
+$bundle,
+$originalController
 );
-public function __construct(RouteCollection $routes, RequestContext $context, LoggerInterface $logger = null)
+if ($alternative = $this->findAlternative($bundle)) {
+$message .= sprintf(' Did you mean "%s:%s:%s"?', $alternative, $controller, $action);
+}
+throw new \InvalidArgumentException($message, 0, $e);
+}
+foreach ($allBundles as $b) {
+$try = $b->getNamespace().'\\Controller\\'.$controller.'Controller';
+if (class_exists($try)) {
+return $try.'::'.$action.'Action';
+}
+$bundles[] = $b->getName();
+$msg = sprintf('The _controller value "%s:%s:%s" maps to a "%s" class, but this class was not found. Create this class or check the spelling of the class and its namespace.', $bundle, $controller, $action, $try);
+}
+if (count($bundles) > 1) {
+$msg = sprintf('Unable to find controller "%s:%s" in bundles %s.', $bundle, $controller, implode(', ', $bundles));
+}
+throw new \InvalidArgumentException($msg);
+}
+public function build($controller)
 {
-$this->routes = $routes;
-$this->context = $context;
-$this->logger = $logger;
+if (0 === preg_match('#^(.*?\\\\Controller\\\\(.+)Controller)::(.+)Action$#', $controller, $match)) {
+throw new \InvalidArgumentException(sprintf('The "%s" controller is not a valid "class::method" string.', $controller));
 }
-public function setContext(RequestContext $context)
+$className = $match[1];
+$controllerName = $match[2];
+$actionName = $match[3];
+foreach ($this->kernel->getBundles() as $name => $bundle) {
+if (0 !== strpos($className, $bundle->getNamespace())) {
+continue;
+}
+return sprintf('%s:%s:%s', $name, $controllerName, $actionName);
+}
+throw new \InvalidArgumentException(sprintf('Unable to find a bundle that defines controller "%s".', $controller));
+}
+private function findAlternative($nonExistentBundleName)
 {
-$this->context = $context;
+$bundleNames = array_map(function ($b) {
+return $b->getName();
+}, $this->kernel->getBundles());
+$alternative = null;
+$shortest = null;
+foreach ($bundleNames as $bundleName) {
+if (false !== strpos($bundleName, $nonExistentBundleName)) {
+return $bundleName;
 }
-public function getContext()
+$lev = levenshtein($nonExistentBundleName, $bundleName);
+if ($lev <= strlen($nonExistentBundleName) / 3 && ($alternative === null || $lev < $shortest)) {
+$alternative = $bundleName;
+$shortest = $lev;
+}
+}
+return $alternative;
+}
+}
+}
+namespace Symfony\Bundle\FrameworkBundle\Controller
 {
-return $this->context;
-}
-public function setStrictRequirements($enabled)
+use Psr\Log\LoggerInterface;
+use Symfony\Component\HttpKernel\Controller\ControllerResolver as BaseControllerResolver;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\DependencyInjection\ContainerAwareInterface;
+class ControllerResolver extends BaseControllerResolver
 {
-$this->strictRequirements = null === $enabled ? null : (bool) $enabled;
-}
-public function isStrictRequirements()
+protected $container;
+protected $parser;
+public function __construct(ContainerInterface $container, ControllerNameParser $parser, LoggerInterface $logger = null)
 {
-return $this->strictRequirements;
+$this->container = $container;
+$this->parser = $parser;
+parent::__construct($logger);
 }
-public function generate($name, $parameters = array(), $referenceType = self::ABSOLUTE_PATH)
+protected function createController($controller)
 {
-if (null === $route = $this->routes->get($name)) {
-throw new RouteNotFoundException(sprintf('Unable to generate a URL for the named route "%s" as such route does not exist.', $name));
+if (false === strpos($controller,'::')) {
+$count = substr_count($controller,':');
+if (2 == $count) {
+$controller = $this->parser->parse($controller);
+} elseif (1 == $count) {
+list($service, $method) = explode(':', $controller, 2);
+return array($this->container->get($service), $method);
+} elseif ($this->container->has($controller) && method_exists($service = $this->container->get($controller),'__invoke')) {
+return $service;
+} else {
+throw new \LogicException(sprintf('Unable to parse the controller name "%s".', $controller));
 }
-$compiledRoute = $route->compile();
-return $this->doGenerate($compiledRoute->getVariables(), $route->getDefaults(), $route->getRequirements(), $compiledRoute->getTokens(), $parameters, $name, $referenceType, $compiledRoute->getHostTokens(), $route->getSchemes());
 }
-protected function doGenerate($variables, $defaults, $requirements, $tokens, $parameters, $name, $referenceType, $hostTokens, array $requiredSchemes = array())
+return parent::createController($controller);
+}
+protected function instantiateController($class)
 {
-$variables = array_flip($variables);
-$mergedParams = array_replace($defaults, $this->context->getParameters(), $parameters);
-if ($diff = array_diff_key($variables, $mergedParams)) {
-throw new MissingMandatoryParametersException(sprintf('Some mandatory parameters are missing ("%s") to generate a URL for route "%s".', implode('", "', array_keys($diff)), $name));
+if ($this->container->has($class)) {
+return $this->container->get($class);
 }
-$url ='';
-$optional = true;
-$message ='Parameter "{parameter}" for route "{route}" must match "{expected}" ("{given}" given) to generate a corresponding URL.';
-foreach ($tokens as $token) {
-if ('variable'=== $token[0]) {
-if (!$optional || !array_key_exists($token[3], $defaults) || null !== $mergedParams[$token[3]] && (string) $mergedParams[$token[3]] !== (string) $defaults[$token[3]]) {
-if (null !== $this->strictRequirements && !preg_match('#^'.$token[2].'$#'.(empty($token[4]) ?'':'u'), $mergedParams[$token[3]])) {
-if ($this->strictRequirements) {
-throw new InvalidParameterException(strtr($message, array('{parameter}'=> $token[3],'{route}'=> $name,'{expected}'=> $token[2],'{given}'=> $mergedParams[$token[3]])));
+$controller = parent::instantiateController($class);
+if ($controller instanceof ContainerAwareInterface) {
+$controller->setContainer($this->container);
 }
-if ($this->logger) {
-$this->logger->error($message, array('parameter'=> $token[3],'route'=> $name,'expected'=> $token[2],'given'=> $mergedParams[$token[3]]));
+return $controller;
 }
+}
+}
+namespace Symfony\Component\Security\Http
+{
+use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\HttpKernel\Event\GetResponseEvent;
+use Symfony\Component\HttpKernel\Event\FinishRequestEvent;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+class Firewall implements EventSubscriberInterface
+{
+private $map;
+private $dispatcher;
+private $exceptionListeners;
+public function __construct(FirewallMapInterface $map, EventDispatcherInterface $dispatcher)
+{
+$this->map = $map;
+$this->dispatcher = $dispatcher;
+$this->exceptionListeners = new \SplObjectStorage();
+}
+public function onKernelRequest(GetResponseEvent $event)
+{
+if (!$event->isMasterRequest()) {
 return;
 }
-$url = $token[1].$mergedParams[$token[3]].$url;
-$optional = false;
+list($listeners, $exceptionListener) = $this->map->getListeners($event->getRequest());
+if (null !== $exceptionListener) {
+$this->exceptionListeners[$event->getRequest()] = $exceptionListener;
+$exceptionListener->register($this->dispatcher);
 }
-} else {
-$url = $token[1].$url;
-$optional = false;
-}
-}
-if (''=== $url) {
-$url ='/';
-}
-$url = strtr(rawurlencode($url), $this->decodedChars);
-$url = strtr($url, array('/../'=>'/%2E%2E/','/./'=>'/%2E/'));
-if ('/..'=== substr($url, -3)) {
-$url = substr($url, 0, -2).'%2E%2E';
-} elseif ('/.'=== substr($url, -2)) {
-$url = substr($url, 0, -1).'%2E';
-}
-$schemeAuthority ='';
-if ($host = $this->context->getHost()) {
-$scheme = $this->context->getScheme();
-if ($requiredSchemes) {
-if (!in_array($scheme, $requiredSchemes, true)) {
-$referenceType = self::ABSOLUTE_URL;
-$scheme = current($requiredSchemes);
-}
-}
-if ($hostTokens) {
-$routeHost ='';
-foreach ($hostTokens as $token) {
-if ('variable'=== $token[0]) {
-if (null !== $this->strictRequirements && !preg_match('#^'.$token[2].'$#i'.(empty($token[4]) ?'':'u'), $mergedParams[$token[3]])) {
-if ($this->strictRequirements) {
-throw new InvalidParameterException(strtr($message, array('{parameter}'=> $token[3],'{route}'=> $name,'{expected}'=> $token[2],'{given}'=> $mergedParams[$token[3]])));
-}
-if ($this->logger) {
-$this->logger->error($message, array('parameter'=> $token[3],'route'=> $name,'expected'=> $token[2],'given'=> $mergedParams[$token[3]]));
-}
-return;
-}
-$routeHost = $token[1].$mergedParams[$token[3]].$routeHost;
-} else {
-$routeHost = $token[1].$routeHost;
-}
-}
-if ($routeHost !== $host) {
-$host = $routeHost;
-if (self::ABSOLUTE_URL !== $referenceType) {
-$referenceType = self::NETWORK_PATH;
-}
-}
-}
-if (self::ABSOLUTE_URL === $referenceType || self::NETWORK_PATH === $referenceType) {
-$port ='';
-if ('http'=== $scheme && 80 != $this->context->getHttpPort()) {
-$port =':'.$this->context->getHttpPort();
-} elseif ('https'=== $scheme && 443 != $this->context->getHttpsPort()) {
-$port =':'.$this->context->getHttpsPort();
-}
-$schemeAuthority = self::NETWORK_PATH === $referenceType ?'//': "$scheme://";
-$schemeAuthority .= $host.$port;
-}
-}
-if (self::RELATIVE_PATH === $referenceType) {
-$url = self::getRelativePath($this->context->getPathInfo(), $url);
-} else {
-$url = $schemeAuthority.$this->context->getBaseUrl().$url;
-}
-$extra = array_udiff_assoc(array_diff_key($parameters, $variables), $defaults, function ($a, $b) {
-return $a == $b ? 0 : 1;
-});
-$fragment ='';
-if (isset($defaults['_fragment'])) {
-$fragment = $defaults['_fragment'];
-}
-if (isset($extra['_fragment'])) {
-$fragment = $extra['_fragment'];
-unset($extra['_fragment']);
-}
-if ($extra && $query = http_build_query($extra,'','&', PHP_QUERY_RFC3986)) {
-$url .='?'.strtr($query, array('%2F'=>'/'));
-}
-if (''!== $fragment) {
-$url .='#'.strtr(rawurlencode($fragment), array('%2F'=>'/','%3F'=>'?'));
-}
-return $url;
-}
-public static function getRelativePath($basePath, $targetPath)
-{
-if ($basePath === $targetPath) {
-return'';
-}
-$sourceDirs = explode('/', isset($basePath[0]) &&'/'=== $basePath[0] ? substr($basePath, 1) : $basePath);
-$targetDirs = explode('/', isset($targetPath[0]) &&'/'=== $targetPath[0] ? substr($targetPath, 1) : $targetPath);
-array_pop($sourceDirs);
-$targetFile = array_pop($targetDirs);
-foreach ($sourceDirs as $i => $dir) {
-if (isset($targetDirs[$i]) && $dir === $targetDirs[$i]) {
-unset($sourceDirs[$i], $targetDirs[$i]);
-} else {
+foreach ($listeners as $listener) {
+$listener->handle($event);
+if ($event->hasResponse()) {
 break;
 }
 }
-$targetDirs[] = $targetFile;
-$path = str_repeat('../', count($sourceDirs)).implode('/', $targetDirs);
-return''=== $path ||'/'=== $path[0]
-|| false !== ($colonPos = strpos($path,':')) && ($colonPos < ($slashPos = strpos($path,'/')) || false === $slashPos)
-? "./$path" : $path;
 }
-}
-}
-namespace Symfony\Component\Routing
+public function onKernelFinishRequest(FinishRequestEvent $event)
 {
-use Symfony\Component\HttpFoundation\Request;
-class RequestContext
-{
-private $baseUrl;
-private $pathInfo;
-private $method;
-private $host;
-private $scheme;
-private $httpPort;
-private $httpsPort;
-private $queryString;
-private $parameters = array();
-public function __construct($baseUrl ='', $method ='GET', $host ='localhost', $scheme ='http', $httpPort = 80, $httpsPort = 443, $path ='/', $queryString ='')
-{
-$this->setBaseUrl($baseUrl);
-$this->setMethod($method);
-$this->setHost($host);
-$this->setScheme($scheme);
-$this->setHttpPort($httpPort);
-$this->setHttpsPort($httpsPort);
-$this->setPathInfo($path);
-$this->setQueryString($queryString);
+$request = $event->getRequest();
+if (isset($this->exceptionListeners[$request])) {
+$this->exceptionListeners[$request]->unregister($this->dispatcher);
+unset($this->exceptionListeners[$request]);
 }
-public function fromRequest(Request $request)
-{
-$this->setBaseUrl($request->getBaseUrl());
-$this->setPathInfo($request->getPathInfo());
-$this->setMethod($request->getMethod());
-$this->setHost($request->getHost());
-$this->setScheme($request->getScheme());
-$this->setHttpPort($request->isSecure() ? $this->httpPort : $request->getPort());
-$this->setHttpsPort($request->isSecure() ? $request->getPort() : $this->httpsPort);
-$this->setQueryString($request->server->get('QUERY_STRING',''));
-return $this;
 }
-public function getBaseUrl()
+public static function getSubscribedEvents()
 {
-return $this->baseUrl;
+return array(
+KernelEvents::REQUEST => array('onKernelRequest', 8),
+KernelEvents::FINISH_REQUEST =>'onKernelFinishRequest',
+);
 }
-public function setBaseUrl($baseUrl)
+}
+}
+namespace Symfony\Component\Security\Core\User
 {
-$this->baseUrl = $baseUrl;
-return $this;
-}
-public function getPathInfo()
+use Symfony\Component\Security\Core\Exception\UsernameNotFoundException;
+use Symfony\Component\Security\Core\Exception\UnsupportedUserException;
+interface UserProviderInterface
 {
-return $this->pathInfo;
-}
-public function setPathInfo($pathInfo)
-{
-$this->pathInfo = $pathInfo;
-return $this;
-}
-public function getMethod()
-{
-return $this->method;
-}
-public function setMethod($method)
-{
-$this->method = strtoupper($method);
-return $this;
-}
-public function getHost()
-{
-return $this->host;
-}
-public function setHost($host)
-{
-$this->host = strtolower($host);
-return $this;
-}
-public function getScheme()
-{
-return $this->scheme;
-}
-public function setScheme($scheme)
-{
-$this->scheme = strtolower($scheme);
-return $this;
-}
-public function getHttpPort()
-{
-return $this->httpPort;
-}
-public function setHttpPort($httpPort)
-{
-$this->httpPort = (int) $httpPort;
-return $this;
-}
-public function getHttpsPort()
-{
-return $this->httpsPort;
-}
-public function setHttpsPort($httpsPort)
-{
-$this->httpsPort = (int) $httpsPort;
-return $this;
-}
-public function getQueryString()
-{
-return $this->queryString;
-}
-public function setQueryString($queryString)
-{
-$this->queryString = (string) $queryString;
-return $this;
-}
-public function getParameters()
-{
-return $this->parameters;
-}
-public function setParameters(array $parameters)
-{
-$this->parameters = $parameters;
-return $this;
-}
-public function getParameter($name)
-{
-return isset($this->parameters[$name]) ? $this->parameters[$name] : null;
-}
-public function hasParameter($name)
-{
-return array_key_exists($name, $this->parameters);
-}
-public function setParameter($name, $parameter)
-{
-$this->parameters[$name] = $parameter;
-return $this;
-}
+public function loadUserByUsername($username);
+public function refreshUser(UserInterface $user);
+public function supportsClass($class);
 }
 }
 namespace Symfony\Component\Security\Core\Authentication
@@ -8149,66 +3362,136 @@ const ACCESS_DENIED = -1;
 public function vote(TokenInterface $token, $subject, array $attributes);
 }
 }
-namespace Symfony\Component\Security\Core\User
-{
-use Symfony\Component\Security\Core\Exception\UsernameNotFoundException;
-use Symfony\Component\Security\Core\Exception\UnsupportedUserException;
-interface UserProviderInterface
-{
-public function loadUserByUsername($username);
-public function refreshUser(UserInterface $user);
-public function supportsClass($class);
-}
-}
 namespace Symfony\Component\Security\Http
 {
-use Symfony\Component\HttpKernel\KernelEvents;
-use Symfony\Component\HttpKernel\Event\GetResponseEvent;
-use Symfony\Component\HttpKernel\Event\FinishRequestEvent;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-class Firewall implements EventSubscriberInterface
+use Symfony\Component\HttpFoundation\Request;
+interface FirewallMapInterface
 {
-private $map;
-private $dispatcher;
-private $exceptionListeners;
-public function __construct(FirewallMapInterface $map, EventDispatcherInterface $dispatcher)
+public function getListeners(Request $request);
+}
+}
+namespace Symfony\Bundle\SecurityBundle\Security
 {
+use Symfony\Component\Security\Http\FirewallMapInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+class FirewallMap implements FirewallMapInterface
+{
+protected $container;
+protected $map;
+public function __construct(ContainerInterface $container, array $map)
+{
+$this->container = $container;
 $this->map = $map;
-$this->dispatcher = $dispatcher;
-$this->exceptionListeners = new \SplObjectStorage();
 }
-public function onKernelRequest(GetResponseEvent $event)
+public function getListeners(Request $request)
 {
-if (!$event->isMasterRequest()) {
-return;
+foreach ($this->map as $contextId => $requestMatcher) {
+if (null === $requestMatcher || $requestMatcher->matches($request)) {
+return $this->container->get($contextId)->getContext();
 }
-list($listeners, $exceptionListener) = $this->map->getListeners($event->getRequest());
-if (null !== $exceptionListener) {
-$this->exceptionListeners[$event->getRequest()] = $exceptionListener;
-$exceptionListener->register($this->dispatcher);
 }
-foreach ($listeners as $listener) {
-$listener->handle($event);
-if ($event->hasResponse()) {
-break;
+return array(array(), null);
 }
 }
 }
-public function onKernelFinishRequest(FinishRequestEvent $event)
+namespace Symfony\Bundle\SecurityBundle\Security
 {
-$request = $event->getRequest();
-if (isset($this->exceptionListeners[$request])) {
-$this->exceptionListeners[$request]->unregister($this->dispatcher);
-unset($this->exceptionListeners[$request]);
-}
-}
-public static function getSubscribedEvents()
+use Symfony\Component\Security\Http\Firewall\ExceptionListener;
+class FirewallContext
 {
-return array(
-KernelEvents::REQUEST => array('onKernelRequest', 8),
-KernelEvents::FINISH_REQUEST =>'onKernelFinishRequest',
-);
+private $listeners;
+private $exceptionListener;
+public function __construct(array $listeners, ExceptionListener $exceptionListener = null)
+{
+$this->listeners = $listeners;
+$this->exceptionListener = $exceptionListener;
+}
+public function getContext()
+{
+return array($this->listeners, $this->exceptionListener);
+}
+}
+}
+namespace Symfony\Component\HttpFoundation
+{
+interface RequestMatcherInterface
+{
+public function matches(Request $request);
+}
+}
+namespace Symfony\Component\HttpFoundation
+{
+class RequestMatcher implements RequestMatcherInterface
+{
+private $path;
+private $host;
+private $methods = array();
+private $ips = array();
+private $attributes = array();
+private $schemes = array();
+public function __construct($path = null, $host = null, $methods = null, $ips = null, array $attributes = array(), $schemes = null)
+{
+$this->matchPath($path);
+$this->matchHost($host);
+$this->matchMethod($methods);
+$this->matchIps($ips);
+$this->matchScheme($schemes);
+foreach ($attributes as $k => $v) {
+$this->matchAttribute($k, $v);
+}
+}
+public function matchScheme($scheme)
+{
+$this->schemes = array_map('strtolower', (array) $scheme);
+}
+public function matchHost($regexp)
+{
+$this->host = $regexp;
+}
+public function matchPath($regexp)
+{
+$this->path = $regexp;
+}
+public function matchIp($ip)
+{
+$this->matchIps($ip);
+}
+public function matchIps($ips)
+{
+$this->ips = (array) $ips;
+}
+public function matchMethod($method)
+{
+$this->methods = array_map('strtoupper', (array) $method);
+}
+public function matchAttribute($key, $regexp)
+{
+$this->attributes[$key] = $regexp;
+}
+public function matches(Request $request)
+{
+if ($this->schemes && !in_array($request->getScheme(), $this->schemes)) {
+return false;
+}
+if ($this->methods && !in_array($request->getMethod(), $this->methods)) {
+return false;
+}
+foreach ($this->attributes as $key => $pattern) {
+if (!preg_match('{'.$pattern.'}', $request->attributes->get($key))) {
+return false;
+}
+}
+if (null !== $this->path && !preg_match('{'.$this->path.'}', rawurldecode($request->getPathInfo()))) {
+return false;
+}
+if (null !== $this->host && !preg_match('{'.$this->host.'}i', $request->getHost())) {
+return false;
+}
+if (IpUtils::checkIp($request->getClientIp(), $this->ips)) {
+return true;
+}
+return count($this->ips) === 0;
 }
 }
 }
@@ -8216,12 +3499,7 @@ namespace
 {
 class Twig_Environment
 {
-const VERSION ='1.28.2';
-const VERSION_ID = 12802;
-const MAJOR_VERSION = 1;
-const MINOR_VERSION = 28;
-const RELEASE_VERSION = 2;
-const EXTRA_VERSION ='';
+const VERSION ='1.27.0';
 protected $charset;
 protected $loader;
 protected $debug;
@@ -8383,16 +3661,6 @@ public function display($name, array $context = array())
 {
 $this->loadTemplate($name)->display($context);
 }
-public function load($name)
-{
-if ($name instanceof Twig_TemplateWrapper) {
-return $name;
-}
-if ($name instanceof Twig_Template) {
-return new Twig_TemplateWrapper($this, $name);
-}
-return new Twig_TemplateWrapper($this, $this->loadTemplate($name));
-}
 public function loadTemplate($name, $index = null)
 {
 $cls = $this->getTemplateClass($name, $index);
@@ -8420,11 +3688,8 @@ if ($this->bcWriteCacheFile) {
 $this->writeCacheFile($key, $content);
 } else {
 $this->cache->write($key, $content);
-$this->cache->load($key);
 }
-if (!class_exists($cls, false)) {
 eval('?>'.$content);
-}
 }
 }
 if (!$this->runtimeInitialized) {
@@ -9154,7 +4419,6 @@ new Twig_TokenParser_Spaceless(),
 new Twig_TokenParser_Flush(),
 new Twig_TokenParser_Do(),
 new Twig_TokenParser_Embed(),
-new Twig_TokenParser_With(),
 );
 }
 public function getFilters()
@@ -9585,7 +4849,7 @@ case'js':
 if ('UTF-8'!== $charset) {
 $string = twig_convert_encoding($string,'UTF-8', $charset);
 }
-if (0 == strlen($string) ? false : 1 !== preg_match('/^./su', $string)) {
+if (0 == strlen($string) ? false : (1 == preg_match('/^./su', $string) ? false : true)) {
 throw new Twig_Error_Runtime('The string to escape is not a valid UTF-8 string.');
 }
 $string = preg_replace_callback('#[^a-zA-Z0-9,\._]#Su','_twig_escape_js_callback', $string);
@@ -9597,7 +4861,7 @@ case'css':
 if ('UTF-8'!== $charset) {
 $string = twig_convert_encoding($string,'UTF-8', $charset);
 }
-if (0 == strlen($string) ? false : 1 !== preg_match('/^./su', $string)) {
+if (0 == strlen($string) ? false : (1 == preg_match('/^./su', $string) ? false : true)) {
 throw new Twig_Error_Runtime('The string to escape is not a valid UTF-8 string.');
 }
 $string = preg_replace_callback('#[^a-zA-Z0-9]#Su','_twig_escape_css_callback', $string);
@@ -9609,7 +4873,7 @@ case'html_attr':
 if ('UTF-8'!== $charset) {
 $string = twig_convert_encoding($string,'UTF-8', $charset);
 }
-if (0 == strlen($string) ? false : 1 !== preg_match('/^./su', $string)) {
+if (0 == strlen($string) ? false : (1 == preg_match('/^./su', $string) ? false : true)) {
 throw new Twig_Error_Runtime('The string to escape is not a valid UTF-8 string.');
 }
 $string = preg_replace_callback('#[^a-zA-Z0-9,\.\-_]#Su','_twig_escape_html_attr_callback', $string);
@@ -9823,13 +5087,6 @@ if (null !== $object) {
 $constant = get_class($object).'::'.$constant;
 }
 return constant($constant);
-}
-function twig_constant_is_defined($constant, $object = null)
-{
-if (null !== $object) {
-$constant = get_class($object).'::'.$constant;
-}
-return defined($constant);
 }
 function twig_array_batch($items, $size, $fill = null)
 {
@@ -10088,34 +5345,13 @@ ob_start();
 $this->displayBlock($name, $context, $blocks, $useBlocks);
 return ob_get_clean();
 }
-public function hasBlock($name, array $context = null, array $blocks = array())
+public function hasBlock($name)
 {
-if (null === $context) {
-@trigger_error('The '.__METHOD__.' method is internal and should never be called; calling it directly is deprecated since version 1.28 and won\'t be possible anymore in 2.0.', E_USER_DEPRECATED);
 return isset($this->blocks[(string) $name]);
 }
-if (isset($blocks[$name])) {
-return $blocks[$name][0] instanceof self;
-}
-if (isset($this->blocks[$name])) {
-return true;
-}
-if (false !== $parent = $this->getParent($context)) {
-return $parent->hasBlock($name, $context);
-}
-return false;
-}
-public function getBlockNames(array $context = null, array $blocks = array())
+public function getBlockNames()
 {
-if (null === $context) {
-@trigger_error('The '.__METHOD__.' method is internal and should never be called; calling it directly is deprecated since version 1.28 and won\'t be possible anymore in 2.0.', E_USER_DEPRECATED);
 return array_keys($this->blocks);
-}
-$names = array_merge(array_keys($blocks), array_keys($this->blocks));
-if (false !== $parent = $this->getParent($context)) {
-$names = array_merge($names, $parent->getBlockNames($context));
-}
-return array_unique($names);
 }
 protected function loadTemplate($template, $templateName = null, $line = null, $index = null)
 {
@@ -10124,9 +5360,6 @@ if (is_array($template)) {
 return $this->env->resolveTemplate($template);
 }
 if ($template instanceof self) {
-return $template;
-}
-if ($template instanceof Twig_TemplateWrapper) {
 return $template;
 }
 return $this->env->loadTemplate($template, $index);
@@ -10204,7 +5437,7 @@ protected function getAttribute($object, $item, array $arguments = array(), $typ
 {
 if (self::METHOD_CALL !== $type) {
 $arrayItem = is_bool($item) || is_float($item) ? (int) $item : $item;
-if ((is_array($object) && (isset($object[$arrayItem]) || array_key_exists($arrayItem, $object)))
+if ((is_array($object) && array_key_exists($arrayItem, $object))
 || ($object instanceof ArrayAccess && isset($object[$arrayItem]))
 ) {
 if ($isDefinedTest) {
@@ -10268,48 +5501,31 @@ return $object->$item;
 }
 }
 $class = get_class($object);
-if (!isset(self::$cache[$class])) {
+if (!isset(self::$cache[$class]['methods'])) {
 if ($object instanceof self) {
 $ref = new ReflectionClass($class);
 $methods = array();
 foreach ($ref->getMethods(ReflectionMethod::IS_PUBLIC) as $refMethod) {
-if ('getenvironment'!== strtolower($refMethod->name)) {
-$methods[] = $refMethod->name;
+$methodName = strtolower($refMethod->name);
+if ('getenvironment'!== $methodName) {
+$methods[$methodName] = true;
 }
 }
+self::$cache[$class]['methods'] = $methods;
 } else {
-$methods = get_class_methods($object);
+self::$cache[$class]['methods'] = array_change_key_case(array_flip(get_class_methods($object)));
 }
-sort($methods);
-$cache = array();
-foreach ($methods as $method) {
-$cache[$method] = $method;
-$cache[$lcName = strtolower($method)] = $method;
-if ('g'=== $lcName[0] && 0 === strpos($lcName,'get')) {
-$name = substr($method, 3);
-$lcName = substr($lcName, 3);
-} elseif ('i'=== $lcName[0] && 0 === strpos($lcName,'is')) {
-$name = substr($method, 2);
-$lcName = substr($lcName, 2);
-} else {
-continue;
-}
-if (!isset($cache[$name])) {
-$cache[$name] = $method;
-}
-if (!isset($cache[$lcName])) {
-$cache[$lcName] = $method;
-}
-}
-self::$cache[$class] = $cache;
 }
 $call = false;
-if (isset(self::$cache[$class][$item])) {
-$method = self::$cache[$class][$item];
-} elseif (isset(self::$cache[$class][$lcItem = strtolower($item)])) {
-$method = self::$cache[$class][$lcItem];
-} elseif (isset(self::$cache[$class]['__call'])) {
-$method = $item;
+$lcItem = strtolower($item);
+if (isset(self::$cache[$class]['methods'][$lcItem])) {
+$method = (string) $item;
+} elseif (isset(self::$cache[$class]['methods']['get'.$lcItem])) {
+$method ='get'.$item;
+} elseif (isset(self::$cache[$class]['methods']['is'.$lcItem])) {
+$method ='is'.$item;
+} elseif (isset(self::$cache[$class]['methods']['__call'])) {
+$method = (string) $item;
 $call = true;
 } else {
 if ($isDefinedTest) {
@@ -10318,7 +5534,7 @@ return false;
 if ($ignoreStrictCheck || !$this->env->isStrictVariables()) {
 return;
 }
-throw new Twig_Error_Runtime(sprintf('Neither the property "%1$s" nor one of the methods "%1$s()", "get%1$s()"/"is%1$s()" or "__call()" exist and have public access in class "%2$s".', $item, $class), -1, $this->getTemplateName());
+throw new Twig_Error_Runtime(sprintf('Neither the property "%1$s" nor one of the methods "%1$s()", "get%1$s()"/"is%1$s()" or "__call()" exist and have public access in class "%2$s".', $item, get_class($object)), -1, $this->getTemplateName());
 }
 if ($isDefinedTest) {
 return true;
@@ -10327,11 +5543,7 @@ if ($this->env->hasExtension('Twig_Extension_Sandbox')) {
 $this->env->getExtension('Twig_Extension_Sandbox')->checkMethodAllowed($object, $method);
 }
 try {
-if (!$arguments) {
-$ret = $object->$method();
-} else {
 $ret = call_user_func_array(array($object, $method), $arguments);
-}
 } catch (BadMethodCallException $e) {
 if ($call && ($ignoreStrictCheck || !$this->env->isStrictVariables())) {
 return;
@@ -10339,19 +5551,2517 @@ return;
 throw $e;
 }
 if ($object instanceof Twig_TemplateInterface) {
-$self = $object->getTemplateName() === $this->getTemplateName();
-$message = sprintf('Calling "%s" on template "%s" from template "%s" is deprecated since version 1.28 and won\'t be supported anymore in 2.0.', $method, $object->getTemplateName(), $this->getTemplateName());
-if ('renderBlock'=== $method ||'displayBlock'=== $method) {
-$message .= sprintf(' Use block("%s"%s) instead).', $arguments[0], $self ?'':', template');
-} elseif ('hasBlock'=== $method) {
-$message .= sprintf(' Use "block("%s"%s) is defined" instead).', $arguments[0], $self ?'':', template');
-} elseif ('render'=== $method ||'display'=== $method) {
-$message .= sprintf(' Use include("%s") instead).', $object->getTemplateName());
-}
-@trigger_error($message, E_USER_DEPRECATED);
 return $ret ===''?'': new Twig_Markup($ret, $this->env->getCharset());
 }
 return $ret;
+}
+}
+}
+namespace Monolog\Formatter
+{
+interface FormatterInterface
+{
+public function format(array $record);
+public function formatBatch(array $records);
+}
+}
+namespace Monolog\Formatter
+{
+use Exception;
+class NormalizerFormatter implements FormatterInterface
+{
+const SIMPLE_DATE ="Y-m-d H:i:s";
+protected $dateFormat;
+public function __construct($dateFormat = null)
+{
+$this->dateFormat = $dateFormat ?: static::SIMPLE_DATE;
+if (!function_exists('json_encode')) {
+throw new \RuntimeException('PHP\'s json extension is required to use Monolog\'s NormalizerFormatter');
+}
+}
+public function format(array $record)
+{
+return $this->normalize($record);
+}
+public function formatBatch(array $records)
+{
+foreach ($records as $key => $record) {
+$records[$key] = $this->format($record);
+}
+return $records;
+}
+protected function normalize($data)
+{
+if (null === $data || is_scalar($data)) {
+if (is_float($data)) {
+if (is_infinite($data)) {
+return ($data > 0 ?'':'-') .'INF';
+}
+if (is_nan($data)) {
+return'NaN';
+}
+}
+return $data;
+}
+if (is_array($data) || $data instanceof \Traversable) {
+$normalized = array();
+$count = 1;
+foreach ($data as $key => $value) {
+if ($count++ >= 1000) {
+$normalized['...'] ='Over 1000 items, aborting normalization';
+break;
+}
+$normalized[$key] = $this->normalize($value);
+}
+return $normalized;
+}
+if ($data instanceof \DateTime) {
+return $data->format($this->dateFormat);
+}
+if (is_object($data)) {
+if ($data instanceof Exception || (PHP_VERSION_ID > 70000 && $data instanceof \Throwable)) {
+return $this->normalizeException($data);
+}
+if (method_exists($data,'__toString') && !$data instanceof \JsonSerializable) {
+$value = $data->__toString();
+} else {
+$value = $this->toJson($data, true);
+}
+return sprintf("[object] (%s: %s)", get_class($data), $value);
+}
+if (is_resource($data)) {
+return sprintf('[resource] (%s)', get_resource_type($data));
+}
+return'[unknown('.gettype($data).')]';
+}
+protected function normalizeException($e)
+{
+if (!$e instanceof Exception && !$e instanceof \Throwable) {
+throw new \InvalidArgumentException('Exception/Throwable expected, got '.gettype($e).' / '.get_class($e));
+}
+$data = array('class'=> get_class($e),'message'=> $e->getMessage(),'code'=> $e->getCode(),'file'=> $e->getFile().':'.$e->getLine(),
+);
+if ($e instanceof \SoapFault) {
+if (isset($e->faultcode)) {
+$data['faultcode'] = $e->faultcode;
+}
+if (isset($e->faultactor)) {
+$data['faultactor'] = $e->faultactor;
+}
+if (isset($e->detail)) {
+$data['detail'] = $e->detail;
+}
+}
+$trace = $e->getTrace();
+foreach ($trace as $frame) {
+if (isset($frame['file'])) {
+$data['trace'][] = $frame['file'].':'.$frame['line'];
+} elseif (isset($frame['function']) && $frame['function'] ==='{closure}') {
+$data['trace'][] = $frame['function'];
+} else {
+$data['trace'][] = $this->toJson($this->normalize($frame), true);
+}
+}
+if ($previous = $e->getPrevious()) {
+$data['previous'] = $this->normalizeException($previous);
+}
+return $data;
+}
+protected function toJson($data, $ignoreErrors = false)
+{
+if ($ignoreErrors) {
+return @$this->jsonEncode($data);
+}
+$json = $this->jsonEncode($data);
+if ($json === false) {
+$json = $this->handleJsonError(json_last_error(), $data);
+}
+return $json;
+}
+private function jsonEncode($data)
+{
+if (version_compare(PHP_VERSION,'5.4.0','>=')) {
+return json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+}
+return json_encode($data);
+}
+private function handleJsonError($code, $data)
+{
+if ($code !== JSON_ERROR_UTF8) {
+$this->throwEncodeError($code, $data);
+}
+if (is_string($data)) {
+$this->detectAndCleanUtf8($data);
+} elseif (is_array($data)) {
+array_walk_recursive($data, array($this,'detectAndCleanUtf8'));
+} else {
+$this->throwEncodeError($code, $data);
+}
+$json = $this->jsonEncode($data);
+if ($json === false) {
+$this->throwEncodeError(json_last_error(), $data);
+}
+return $json;
+}
+private function throwEncodeError($code, $data)
+{
+switch ($code) {
+case JSON_ERROR_DEPTH:
+$msg ='Maximum stack depth exceeded';
+break;
+case JSON_ERROR_STATE_MISMATCH:
+$msg ='Underflow or the modes mismatch';
+break;
+case JSON_ERROR_CTRL_CHAR:
+$msg ='Unexpected control character found';
+break;
+case JSON_ERROR_UTF8:
+$msg ='Malformed UTF-8 characters, possibly incorrectly encoded';
+break;
+default:
+$msg ='Unknown error';
+}
+throw new \RuntimeException('JSON encoding failed: '.$msg.'. Encoding: '.var_export($data, true));
+}
+public function detectAndCleanUtf8(&$data)
+{
+if (is_string($data) && !preg_match('//u', $data)) {
+$data = preg_replace_callback('/[\x80-\xFF]+/',
+function ($m) { return utf8_encode($m[0]); },
+$data
+);
+$data = str_replace(
+array('¤','¦','¨','´','¸','¼','½','¾'),
+array('€','Š','š','Ž','ž','Œ','œ','Ÿ'),
+$data
+);
+}
+}
+}
+}
+namespace Monolog\Formatter
+{
+class LineFormatter extends NormalizerFormatter
+{
+const SIMPLE_FORMAT ="[%datetime%] %channel%.%level_name%: %message% %context% %extra%\n";
+protected $format;
+protected $allowInlineLineBreaks;
+protected $ignoreEmptyContextAndExtra;
+protected $includeStacktraces;
+public function __construct($format = null, $dateFormat = null, $allowInlineLineBreaks = false, $ignoreEmptyContextAndExtra = false)
+{
+$this->format = $format ?: static::SIMPLE_FORMAT;
+$this->allowInlineLineBreaks = $allowInlineLineBreaks;
+$this->ignoreEmptyContextAndExtra = $ignoreEmptyContextAndExtra;
+parent::__construct($dateFormat);
+}
+public function includeStacktraces($include = true)
+{
+$this->includeStacktraces = $include;
+if ($this->includeStacktraces) {
+$this->allowInlineLineBreaks = true;
+}
+}
+public function allowInlineLineBreaks($allow = true)
+{
+$this->allowInlineLineBreaks = $allow;
+}
+public function ignoreEmptyContextAndExtra($ignore = true)
+{
+$this->ignoreEmptyContextAndExtra = $ignore;
+}
+public function format(array $record)
+{
+$vars = parent::format($record);
+$output = $this->format;
+foreach ($vars['extra'] as $var => $val) {
+if (false !== strpos($output,'%extra.'.$var.'%')) {
+$output = str_replace('%extra.'.$var.'%', $this->stringify($val), $output);
+unset($vars['extra'][$var]);
+}
+}
+foreach ($vars['context'] as $var => $val) {
+if (false !== strpos($output,'%context.'.$var.'%')) {
+$output = str_replace('%context.'.$var.'%', $this->stringify($val), $output);
+unset($vars['context'][$var]);
+}
+}
+if ($this->ignoreEmptyContextAndExtra) {
+if (empty($vars['context'])) {
+unset($vars['context']);
+$output = str_replace('%context%','', $output);
+}
+if (empty($vars['extra'])) {
+unset($vars['extra']);
+$output = str_replace('%extra%','', $output);
+}
+}
+foreach ($vars as $var => $val) {
+if (false !== strpos($output,'%'.$var.'%')) {
+$output = str_replace('%'.$var.'%', $this->stringify($val), $output);
+}
+}
+return $output;
+}
+public function formatBatch(array $records)
+{
+$message ='';
+foreach ($records as $record) {
+$message .= $this->format($record);
+}
+return $message;
+}
+public function stringify($value)
+{
+return $this->replaceNewlines($this->convertToString($value));
+}
+protected function normalizeException($e)
+{
+if (!$e instanceof \Exception && !$e instanceof \Throwable) {
+throw new \InvalidArgumentException('Exception/Throwable expected, got '.gettype($e).' / '.get_class($e));
+}
+$previousText ='';
+if ($previous = $e->getPrevious()) {
+do {
+$previousText .=', '.get_class($previous).'(code: '.$previous->getCode().'): '.$previous->getMessage().' at '.$previous->getFile().':'.$previous->getLine();
+} while ($previous = $previous->getPrevious());
+}
+$str ='[object] ('.get_class($e).'(code: '.$e->getCode().'): '.$e->getMessage().' at '.$e->getFile().':'.$e->getLine().$previousText.')';
+if ($this->includeStacktraces) {
+$str .="\n[stacktrace]\n".$e->getTraceAsString();
+}
+return $str;
+}
+protected function convertToString($data)
+{
+if (null === $data || is_bool($data)) {
+return var_export($data, true);
+}
+if (is_scalar($data)) {
+return (string) $data;
+}
+if (version_compare(PHP_VERSION,'5.4.0','>=')) {
+return $this->toJson($data, true);
+}
+return str_replace('\\/','/', @json_encode($data));
+}
+protected function replaceNewlines($str)
+{
+if ($this->allowInlineLineBreaks) {
+return $str;
+}
+return str_replace(array("\r\n","\r","\n"),' ', $str);
+}
+}
+}
+namespace Monolog\Handler
+{
+use Monolog\Formatter\FormatterInterface;
+interface HandlerInterface
+{
+public function isHandling(array $record);
+public function handle(array $record);
+public function handleBatch(array $records);
+public function pushProcessor($callback);
+public function popProcessor();
+public function setFormatter(FormatterInterface $formatter);
+public function getFormatter();
+}
+}
+namespace Monolog\Handler
+{
+use Monolog\Logger;
+use Monolog\Formatter\FormatterInterface;
+use Monolog\Formatter\LineFormatter;
+abstract class AbstractHandler implements HandlerInterface
+{
+protected $level = Logger::DEBUG;
+protected $bubble = true;
+protected $formatter;
+protected $processors = array();
+public function __construct($level = Logger::DEBUG, $bubble = true)
+{
+$this->setLevel($level);
+$this->bubble = $bubble;
+}
+public function isHandling(array $record)
+{
+return $record['level'] >= $this->level;
+}
+public function handleBatch(array $records)
+{
+foreach ($records as $record) {
+$this->handle($record);
+}
+}
+public function close()
+{
+}
+public function pushProcessor($callback)
+{
+if (!is_callable($callback)) {
+throw new \InvalidArgumentException('Processors must be valid callables (callback or object with an __invoke method), '.var_export($callback, true).' given');
+}
+array_unshift($this->processors, $callback);
+return $this;
+}
+public function popProcessor()
+{
+if (!$this->processors) {
+throw new \LogicException('You tried to pop from an empty processor stack.');
+}
+return array_shift($this->processors);
+}
+public function setFormatter(FormatterInterface $formatter)
+{
+$this->formatter = $formatter;
+return $this;
+}
+public function getFormatter()
+{
+if (!$this->formatter) {
+$this->formatter = $this->getDefaultFormatter();
+}
+return $this->formatter;
+}
+public function setLevel($level)
+{
+$this->level = Logger::toMonologLevel($level);
+return $this;
+}
+public function getLevel()
+{
+return $this->level;
+}
+public function setBubble($bubble)
+{
+$this->bubble = $bubble;
+return $this;
+}
+public function getBubble()
+{
+return $this->bubble;
+}
+public function __destruct()
+{
+try {
+$this->close();
+} catch (\Exception $e) {
+} catch (\Throwable $e) {
+}
+}
+protected function getDefaultFormatter()
+{
+return new LineFormatter();
+}
+}
+}
+namespace Monolog\Handler
+{
+abstract class AbstractProcessingHandler extends AbstractHandler
+{
+public function handle(array $record)
+{
+if (!$this->isHandling($record)) {
+return false;
+}
+$record = $this->processRecord($record);
+$record['formatted'] = $this->getFormatter()->format($record);
+$this->write($record);
+return false === $this->bubble;
+}
+abstract protected function write(array $record);
+protected function processRecord(array $record)
+{
+if ($this->processors) {
+foreach ($this->processors as $processor) {
+$record = call_user_func($processor, $record);
+}
+}
+return $record;
+}
+}
+}
+namespace Monolog\Handler
+{
+use Monolog\Logger;
+class StreamHandler extends AbstractProcessingHandler
+{
+protected $stream;
+protected $url;
+private $errorMessage;
+protected $filePermission;
+protected $useLocking;
+private $dirCreated;
+public function __construct($stream, $level = Logger::DEBUG, $bubble = true, $filePermission = null, $useLocking = false)
+{
+parent::__construct($level, $bubble);
+if (is_resource($stream)) {
+$this->stream = $stream;
+} elseif (is_string($stream)) {
+$this->url = $stream;
+} else {
+throw new \InvalidArgumentException('A stream must either be a resource or a string.');
+}
+$this->filePermission = $filePermission;
+$this->useLocking = $useLocking;
+}
+public function close()
+{
+if ($this->url && is_resource($this->stream)) {
+fclose($this->stream);
+}
+$this->stream = null;
+}
+public function getStream()
+{
+return $this->stream;
+}
+public function getUrl()
+{
+return $this->url;
+}
+protected function write(array $record)
+{
+if (!is_resource($this->stream)) {
+if (null === $this->url ||''=== $this->url) {
+throw new \LogicException('Missing stream url, the stream can not be opened. This may be caused by a premature call to close().');
+}
+$this->createDir();
+$this->errorMessage = null;
+set_error_handler(array($this,'customErrorHandler'));
+$this->stream = fopen($this->url,'a');
+if ($this->filePermission !== null) {
+@chmod($this->url, $this->filePermission);
+}
+restore_error_handler();
+if (!is_resource($this->stream)) {
+$this->stream = null;
+throw new \UnexpectedValueException(sprintf('The stream or file "%s" could not be opened: '.$this->errorMessage, $this->url));
+}
+}
+if ($this->useLocking) {
+flock($this->stream, LOCK_EX);
+}
+fwrite($this->stream, (string) $record['formatted']);
+if ($this->useLocking) {
+flock($this->stream, LOCK_UN);
+}
+}
+private function customErrorHandler($code, $msg)
+{
+$this->errorMessage = preg_replace('{^(fopen|mkdir)\(.*?\): }','', $msg);
+}
+private function getDirFromStream($stream)
+{
+$pos = strpos($stream,'://');
+if ($pos === false) {
+return dirname($stream);
+}
+if ('file://'=== substr($stream, 0, 7)) {
+return dirname(substr($stream, 7));
+}
+return;
+}
+private function createDir()
+{
+if ($this->dirCreated) {
+return;
+}
+$dir = $this->getDirFromStream($this->url);
+if (null !== $dir && !is_dir($dir)) {
+$this->errorMessage = null;
+set_error_handler(array($this,'customErrorHandler'));
+$status = mkdir($dir, 0777, true);
+restore_error_handler();
+if (false === $status) {
+throw new \UnexpectedValueException(sprintf('There is no existing directory at "%s" and its not buildable: '.$this->errorMessage, $dir));
+}
+}
+$this->dirCreated = true;
+}
+}
+}
+namespace Monolog\Handler
+{
+use Monolog\Handler\FingersCrossed\ErrorLevelActivationStrategy;
+use Monolog\Handler\FingersCrossed\ActivationStrategyInterface;
+use Monolog\Logger;
+class FingersCrossedHandler extends AbstractHandler
+{
+protected $handler;
+protected $activationStrategy;
+protected $buffering = true;
+protected $bufferSize;
+protected $buffer = array();
+protected $stopBuffering;
+protected $passthruLevel;
+public function __construct($handler, $activationStrategy = null, $bufferSize = 0, $bubble = true, $stopBuffering = true, $passthruLevel = null)
+{
+if (null === $activationStrategy) {
+$activationStrategy = new ErrorLevelActivationStrategy(Logger::WARNING);
+}
+if (!$activationStrategy instanceof ActivationStrategyInterface) {
+$activationStrategy = new ErrorLevelActivationStrategy($activationStrategy);
+}
+$this->handler = $handler;
+$this->activationStrategy = $activationStrategy;
+$this->bufferSize = $bufferSize;
+$this->bubble = $bubble;
+$this->stopBuffering = $stopBuffering;
+if ($passthruLevel !== null) {
+$this->passthruLevel = Logger::toMonologLevel($passthruLevel);
+}
+if (!$this->handler instanceof HandlerInterface && !is_callable($this->handler)) {
+throw new \RuntimeException("The given handler (".json_encode($this->handler).") is not a callable nor a Monolog\Handler\HandlerInterface object");
+}
+}
+public function isHandling(array $record)
+{
+return true;
+}
+public function activate()
+{
+if ($this->stopBuffering) {
+$this->buffering = false;
+}
+if (!$this->handler instanceof HandlerInterface) {
+$record = end($this->buffer) ?: null;
+$this->handler = call_user_func($this->handler, $record, $this);
+if (!$this->handler instanceof HandlerInterface) {
+throw new \RuntimeException("The factory callable should return a HandlerInterface");
+}
+}
+$this->handler->handleBatch($this->buffer);
+$this->buffer = array();
+}
+public function handle(array $record)
+{
+if ($this->processors) {
+foreach ($this->processors as $processor) {
+$record = call_user_func($processor, $record);
+}
+}
+if ($this->buffering) {
+$this->buffer[] = $record;
+if ($this->bufferSize > 0 && count($this->buffer) > $this->bufferSize) {
+array_shift($this->buffer);
+}
+if ($this->activationStrategy->isHandlerActivated($record)) {
+$this->activate();
+}
+} else {
+$this->handler->handle($record);
+}
+return false === $this->bubble;
+}
+public function close()
+{
+if (null !== $this->passthruLevel) {
+$level = $this->passthruLevel;
+$this->buffer = array_filter($this->buffer, function ($record) use ($level) {
+return $record['level'] >= $level;
+});
+if (count($this->buffer) > 0) {
+$this->handler->handleBatch($this->buffer);
+$this->buffer = array();
+}
+}
+}
+public function reset()
+{
+$this->buffering = true;
+}
+public function clear()
+{
+$this->buffer = array();
+$this->reset();
+}
+}
+}
+namespace Monolog\Handler
+{
+use Monolog\Logger;
+class FilterHandler extends AbstractHandler
+{
+protected $handler;
+protected $acceptedLevels;
+protected $bubble;
+public function __construct($handler, $minLevelOrList = Logger::DEBUG, $maxLevel = Logger::EMERGENCY, $bubble = true)
+{
+$this->handler = $handler;
+$this->bubble = $bubble;
+$this->setAcceptedLevels($minLevelOrList, $maxLevel);
+if (!$this->handler instanceof HandlerInterface && !is_callable($this->handler)) {
+throw new \RuntimeException("The given handler (".json_encode($this->handler).") is not a callable nor a Monolog\Handler\HandlerInterface object");
+}
+}
+public function getAcceptedLevels()
+{
+return array_flip($this->acceptedLevels);
+}
+public function setAcceptedLevels($minLevelOrList = Logger::DEBUG, $maxLevel = Logger::EMERGENCY)
+{
+if (is_array($minLevelOrList)) {
+$acceptedLevels = array_map('Monolog\Logger::toMonologLevel', $minLevelOrList);
+} else {
+$minLevelOrList = Logger::toMonologLevel($minLevelOrList);
+$maxLevel = Logger::toMonologLevel($maxLevel);
+$acceptedLevels = array_values(array_filter(Logger::getLevels(), function ($level) use ($minLevelOrList, $maxLevel) {
+return $level >= $minLevelOrList && $level <= $maxLevel;
+}));
+}
+$this->acceptedLevels = array_flip($acceptedLevels);
+}
+public function isHandling(array $record)
+{
+return isset($this->acceptedLevels[$record['level']]);
+}
+public function handle(array $record)
+{
+if (!$this->isHandling($record)) {
+return false;
+}
+if (!$this->handler instanceof HandlerInterface) {
+$this->handler = call_user_func($this->handler, $record, $this);
+if (!$this->handler instanceof HandlerInterface) {
+throw new \RuntimeException("The factory callable should return a HandlerInterface");
+}
+}
+if ($this->processors) {
+foreach ($this->processors as $processor) {
+$record = call_user_func($processor, $record);
+}
+}
+$this->handler->handle($record);
+return false === $this->bubble;
+}
+public function handleBatch(array $records)
+{
+$filtered = array();
+foreach ($records as $record) {
+if ($this->isHandling($record)) {
+$filtered[] = $record;
+}
+}
+$this->handler->handleBatch($filtered);
+}
+}
+}
+namespace Monolog\Handler
+{
+class TestHandler extends AbstractProcessingHandler
+{
+protected $records = array();
+protected $recordsByLevel = array();
+public function getRecords()
+{
+return $this->records;
+}
+public function clear()
+{
+$this->records = array();
+$this->recordsByLevel = array();
+}
+protected function hasRecordRecords($level)
+{
+return isset($this->recordsByLevel[$level]);
+}
+protected function hasRecord($record, $level)
+{
+if (is_array($record)) {
+$record = $record['message'];
+}
+return $this->hasRecordThatPasses(function ($rec) use ($record) {
+return $rec['message'] === $record;
+}, $level);
+}
+public function hasRecordThatContains($message, $level)
+{
+return $this->hasRecordThatPasses(function ($rec) use ($message) {
+return strpos($rec['message'], $message) !== false;
+}, $level);
+}
+public function hasRecordThatMatches($regex, $level)
+{
+return $this->hasRecordThatPasses(function ($rec) use ($regex) {
+return preg_match($regex, $rec['message']) > 0;
+}, $level);
+}
+public function hasRecordThatPasses($predicate, $level)
+{
+if (!is_callable($predicate)) {
+throw new \InvalidArgumentException("Expected a callable for hasRecordThatSucceeds");
+}
+if (!isset($this->recordsByLevel[$level])) {
+return false;
+}
+foreach ($this->recordsByLevel[$level] as $i => $rec) {
+if (call_user_func($predicate, $rec, $i)) {
+return true;
+}
+}
+return false;
+}
+protected function write(array $record)
+{
+$this->recordsByLevel[$record['level']][] = $record;
+$this->records[] = $record;
+}
+public function __call($method, $args)
+{
+if (preg_match('/(.*)(Debug|Info|Notice|Warning|Error|Critical|Alert|Emergency)(.*)/', $method, $matches) > 0) {
+$genericMethod = $matches[1] .'Record'. $matches[3];
+$level = constant('Monolog\Logger::'. strtoupper($matches[2]));
+if (method_exists($this, $genericMethod)) {
+$args[] = $level;
+return call_user_func_array(array($this, $genericMethod), $args);
+}
+}
+throw new \BadMethodCallException('Call to undefined method '. get_class($this) .'::'. $method .'()');
+}
+}
+}
+namespace Monolog
+{
+use Monolog\Handler\HandlerInterface;
+use Monolog\Handler\StreamHandler;
+use Psr\Log\LoggerInterface;
+use Psr\Log\InvalidArgumentException;
+class Logger implements LoggerInterface
+{
+const DEBUG = 100;
+const INFO = 200;
+const NOTICE = 250;
+const WARNING = 300;
+const ERROR = 400;
+const CRITICAL = 500;
+const ALERT = 550;
+const EMERGENCY = 600;
+const API = 1;
+protected static $levels = array(
+self::DEBUG =>'DEBUG',
+self::INFO =>'INFO',
+self::NOTICE =>'NOTICE',
+self::WARNING =>'WARNING',
+self::ERROR =>'ERROR',
+self::CRITICAL =>'CRITICAL',
+self::ALERT =>'ALERT',
+self::EMERGENCY =>'EMERGENCY',
+);
+protected static $timezone;
+protected $name;
+protected $handlers;
+protected $processors;
+protected $microsecondTimestamps = true;
+public function __construct($name, array $handlers = array(), array $processors = array())
+{
+$this->name = $name;
+$this->handlers = $handlers;
+$this->processors = $processors;
+}
+public function getName()
+{
+return $this->name;
+}
+public function withName($name)
+{
+$new = clone $this;
+$new->name = $name;
+return $new;
+}
+public function pushHandler(HandlerInterface $handler)
+{
+array_unshift($this->handlers, $handler);
+return $this;
+}
+public function popHandler()
+{
+if (!$this->handlers) {
+throw new \LogicException('You tried to pop from an empty handler stack.');
+}
+return array_shift($this->handlers);
+}
+public function setHandlers(array $handlers)
+{
+$this->handlers = array();
+foreach (array_reverse($handlers) as $handler) {
+$this->pushHandler($handler);
+}
+return $this;
+}
+public function getHandlers()
+{
+return $this->handlers;
+}
+public function pushProcessor($callback)
+{
+if (!is_callable($callback)) {
+throw new \InvalidArgumentException('Processors must be valid callables (callback or object with an __invoke method), '.var_export($callback, true).' given');
+}
+array_unshift($this->processors, $callback);
+return $this;
+}
+public function popProcessor()
+{
+if (!$this->processors) {
+throw new \LogicException('You tried to pop from an empty processor stack.');
+}
+return array_shift($this->processors);
+}
+public function getProcessors()
+{
+return $this->processors;
+}
+public function useMicrosecondTimestamps($micro)
+{
+$this->microsecondTimestamps = (bool) $micro;
+}
+public function addRecord($level, $message, array $context = array())
+{
+if (!$this->handlers) {
+$this->pushHandler(new StreamHandler('php://stderr', static::DEBUG));
+}
+$levelName = static::getLevelName($level);
+$handlerKey = null;
+reset($this->handlers);
+while ($handler = current($this->handlers)) {
+if ($handler->isHandling(array('level'=> $level))) {
+$handlerKey = key($this->handlers);
+break;
+}
+next($this->handlers);
+}
+if (null === $handlerKey) {
+return false;
+}
+if (!static::$timezone) {
+static::$timezone = new \DateTimeZone(date_default_timezone_get() ?:'UTC');
+}
+if ($this->microsecondTimestamps) {
+$ts = \DateTime::createFromFormat('U.u', sprintf('%.6F', microtime(true)), static::$timezone);
+} else {
+$ts = new \DateTime(null, static::$timezone);
+}
+$ts->setTimezone(static::$timezone);
+$record = array('message'=> (string) $message,'context'=> $context,'level'=> $level,'level_name'=> $levelName,'channel'=> $this->name,'datetime'=> $ts,'extra'=> array(),
+);
+foreach ($this->processors as $processor) {
+$record = call_user_func($processor, $record);
+}
+while ($handler = current($this->handlers)) {
+if (true === $handler->handle($record)) {
+break;
+}
+next($this->handlers);
+}
+return true;
+}
+public function addDebug($message, array $context = array())
+{
+return $this->addRecord(static::DEBUG, $message, $context);
+}
+public function addInfo($message, array $context = array())
+{
+return $this->addRecord(static::INFO, $message, $context);
+}
+public function addNotice($message, array $context = array())
+{
+return $this->addRecord(static::NOTICE, $message, $context);
+}
+public function addWarning($message, array $context = array())
+{
+return $this->addRecord(static::WARNING, $message, $context);
+}
+public function addError($message, array $context = array())
+{
+return $this->addRecord(static::ERROR, $message, $context);
+}
+public function addCritical($message, array $context = array())
+{
+return $this->addRecord(static::CRITICAL, $message, $context);
+}
+public function addAlert($message, array $context = array())
+{
+return $this->addRecord(static::ALERT, $message, $context);
+}
+public function addEmergency($message, array $context = array())
+{
+return $this->addRecord(static::EMERGENCY, $message, $context);
+}
+public static function getLevels()
+{
+return array_flip(static::$levels);
+}
+public static function getLevelName($level)
+{
+if (!isset(static::$levels[$level])) {
+throw new InvalidArgumentException('Level "'.$level.'" is not defined, use one of: '.implode(', ', array_keys(static::$levels)));
+}
+return static::$levels[$level];
+}
+public static function toMonologLevel($level)
+{
+if (is_string($level) && defined(__CLASS__.'::'.strtoupper($level))) {
+return constant(__CLASS__.'::'.strtoupper($level));
+}
+return $level;
+}
+public function isHandling($level)
+{
+$record = array('level'=> $level,
+);
+foreach ($this->handlers as $handler) {
+if ($handler->isHandling($record)) {
+return true;
+}
+}
+return false;
+}
+public function log($level, $message, array $context = array())
+{
+$level = static::toMonologLevel($level);
+return $this->addRecord($level, $message, $context);
+}
+public function debug($message, array $context = array())
+{
+return $this->addRecord(static::DEBUG, $message, $context);
+}
+public function info($message, array $context = array())
+{
+return $this->addRecord(static::INFO, $message, $context);
+}
+public function notice($message, array $context = array())
+{
+return $this->addRecord(static::NOTICE, $message, $context);
+}
+public function warn($message, array $context = array())
+{
+return $this->addRecord(static::WARNING, $message, $context);
+}
+public function warning($message, array $context = array())
+{
+return $this->addRecord(static::WARNING, $message, $context);
+}
+public function err($message, array $context = array())
+{
+return $this->addRecord(static::ERROR, $message, $context);
+}
+public function error($message, array $context = array())
+{
+return $this->addRecord(static::ERROR, $message, $context);
+}
+public function crit($message, array $context = array())
+{
+return $this->addRecord(static::CRITICAL, $message, $context);
+}
+public function critical($message, array $context = array())
+{
+return $this->addRecord(static::CRITICAL, $message, $context);
+}
+public function alert($message, array $context = array())
+{
+return $this->addRecord(static::ALERT, $message, $context);
+}
+public function emerg($message, array $context = array())
+{
+return $this->addRecord(static::EMERGENCY, $message, $context);
+}
+public function emergency($message, array $context = array())
+{
+return $this->addRecord(static::EMERGENCY, $message, $context);
+}
+public static function setTimezone(\DateTimeZone $tz)
+{
+self::$timezone = $tz;
+}
+}
+}
+namespace Symfony\Component\HttpKernel\Log
+{
+interface DebugLoggerInterface
+{
+public function getLogs();
+public function countErrors();
+}
+}
+namespace Symfony\Bridge\Monolog
+{
+use Monolog\Logger as BaseLogger;
+use Symfony\Component\HttpKernel\Log\DebugLoggerInterface;
+class Logger extends BaseLogger implements DebugLoggerInterface
+{
+public function getLogs()
+{
+if ($logger = $this->getDebugLogger()) {
+return $logger->getLogs();
+}
+return array();
+}
+public function countErrors()
+{
+if ($logger = $this->getDebugLogger()) {
+return $logger->countErrors();
+}
+return 0;
+}
+private function getDebugLogger()
+{
+foreach ($this->handlers as $handler) {
+if ($handler instanceof DebugLoggerInterface) {
+return $handler;
+}
+}
+}
+}
+}
+namespace Symfony\Bridge\Monolog\Handler
+{
+use Monolog\Logger;
+use Monolog\Handler\TestHandler;
+use Symfony\Component\HttpKernel\Log\DebugLoggerInterface;
+class DebugHandler extends TestHandler implements DebugLoggerInterface
+{
+public function getLogs()
+{
+$records = array();
+foreach ($this->records as $record) {
+$records[] = array('timestamp'=> $record['datetime']->getTimestamp(),'message'=> $record['message'],'priority'=> $record['level'],'priorityName'=> $record['level_name'],'context'=> $record['context'],'channel'=> isset($record['channel']) ? $record['channel'] :'',
+);
+}
+return $records;
+}
+public function countErrors()
+{
+$cnt = 0;
+$levels = array(Logger::ERROR, Logger::CRITICAL, Logger::ALERT, Logger::EMERGENCY);
+foreach ($levels as $level) {
+if (isset($this->recordsByLevel[$level])) {
+$cnt += count($this->recordsByLevel[$level]);
+}
+}
+return $cnt;
+}
+}
+}
+namespace Monolog\Handler\FingersCrossed
+{
+interface ActivationStrategyInterface
+{
+public function isHandlerActivated(array $record);
+}
+}
+namespace Monolog\Handler\FingersCrossed
+{
+use Monolog\Logger;
+class ErrorLevelActivationStrategy implements ActivationStrategyInterface
+{
+private $actionLevel;
+public function __construct($actionLevel)
+{
+$this->actionLevel = Logger::toMonologLevel($actionLevel);
+}
+public function isHandlerActivated(array $record)
+{
+return $record['level'] >= $this->actionLevel;
+}
+}
+}
+namespace Doctrine\Common\Lexer
+{
+abstract class AbstractLexer
+{
+private $input;
+private $tokens = array();
+private $position = 0;
+private $peek = 0;
+public $lookahead;
+public $token;
+public function setInput($input)
+{
+$this->input = $input;
+$this->tokens = array();
+$this->reset();
+$this->scan($input);
+}
+public function reset()
+{
+$this->lookahead = null;
+$this->token = null;
+$this->peek = 0;
+$this->position = 0;
+}
+public function resetPeek()
+{
+$this->peek = 0;
+}
+public function resetPosition($position = 0)
+{
+$this->position = $position;
+}
+public function getInputUntilPosition($position)
+{
+return substr($this->input, 0, $position);
+}
+public function isNextToken($token)
+{
+return null !== $this->lookahead && $this->lookahead['type'] === $token;
+}
+public function isNextTokenAny(array $tokens)
+{
+return null !== $this->lookahead && in_array($this->lookahead['type'], $tokens, true);
+}
+public function moveNext()
+{
+$this->peek = 0;
+$this->token = $this->lookahead;
+$this->lookahead = (isset($this->tokens[$this->position]))
+? $this->tokens[$this->position++] : null;
+return $this->lookahead !== null;
+}
+public function skipUntil($type)
+{
+while ($this->lookahead !== null && $this->lookahead['type'] !== $type) {
+$this->moveNext();
+}
+}
+public function isA($value, $token)
+{
+return $this->getType($value) === $token;
+}
+public function peek()
+{
+if (isset($this->tokens[$this->position + $this->peek])) {
+return $this->tokens[$this->position + $this->peek++];
+} else {
+return null;
+}
+}
+public function glimpse()
+{
+$peek = $this->peek();
+$this->peek = 0;
+return $peek;
+}
+protected function scan($input)
+{
+static $regex;
+if ( ! isset($regex)) {
+$regex = sprintf('/(%s)|%s/%s',
+implode(')|(', $this->getCatchablePatterns()),
+implode('|', $this->getNonCatchablePatterns()),
+$this->getModifiers()
+);
+}
+$flags = PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_OFFSET_CAPTURE;
+$matches = preg_split($regex, $input, -1, $flags);
+foreach ($matches as $match) {
+$type = $this->getType($match[0]);
+$this->tokens[] = array('value'=> $match[0],'type'=> $type,'position'=> $match[1],
+);
+}
+}
+public function getLiteral($token)
+{
+$className = get_class($this);
+$reflClass = new \ReflectionClass($className);
+$constants = $reflClass->getConstants();
+foreach ($constants as $name => $value) {
+if ($value === $token) {
+return $className .'::'. $name;
+}
+}
+return $token;
+}
+protected function getModifiers()
+{
+return'i';
+}
+abstract protected function getCatchablePatterns();
+abstract protected function getNonCatchablePatterns();
+abstract protected function getType(&$value);
+}
+}
+namespace Doctrine\Common\Annotations
+{
+use Doctrine\Common\Lexer\AbstractLexer;
+final class DocLexer extends AbstractLexer
+{
+const T_NONE = 1;
+const T_INTEGER = 2;
+const T_STRING = 3;
+const T_FLOAT = 4;
+const T_IDENTIFIER = 100;
+const T_AT = 101;
+const T_CLOSE_CURLY_BRACES = 102;
+const T_CLOSE_PARENTHESIS = 103;
+const T_COMMA = 104;
+const T_EQUALS = 105;
+const T_FALSE = 106;
+const T_NAMESPACE_SEPARATOR = 107;
+const T_OPEN_CURLY_BRACES = 108;
+const T_OPEN_PARENTHESIS = 109;
+const T_TRUE = 110;
+const T_NULL = 111;
+const T_COLON = 112;
+protected $noCase = array('@'=> self::T_AT,','=> self::T_COMMA,'('=> self::T_OPEN_PARENTHESIS,')'=> self::T_CLOSE_PARENTHESIS,'{'=> self::T_OPEN_CURLY_BRACES,'}'=> self::T_CLOSE_CURLY_BRACES,'='=> self::T_EQUALS,':'=> self::T_COLON,'\\'=> self::T_NAMESPACE_SEPARATOR
+);
+protected $withCase = array('true'=> self::T_TRUE,'false'=> self::T_FALSE,'null'=> self::T_NULL
+);
+protected function getCatchablePatterns()
+{
+return array('[a-z_\\\][a-z0-9_\:\\\]*[a-z_][a-z0-9_]*','(?:[+-]?[0-9]+(?:[\.][0-9]+)*)(?:[eE][+-]?[0-9]+)?','"(?:""|[^"])*+"',
+);
+}
+protected function getNonCatchablePatterns()
+{
+return array('\s+','\*+','(.)');
+}
+protected function getType(&$value)
+{
+$type = self::T_NONE;
+if ($value[0] ==='"') {
+$value = str_replace('""','"', substr($value, 1, strlen($value) - 2));
+return self::T_STRING;
+}
+if (isset($this->noCase[$value])) {
+return $this->noCase[$value];
+}
+if ($value[0] ==='_'|| $value[0] ==='\\'|| ctype_alpha($value[0])) {
+return self::T_IDENTIFIER;
+}
+$lowerValue = strtolower($value);
+if (isset($this->withCase[$lowerValue])) {
+return $this->withCase[$lowerValue];
+}
+if (is_numeric($value)) {
+return (strpos($value,'.') !== false || stripos($value,'e') !== false)
+? self::T_FLOAT : self::T_INTEGER;
+}
+return $type;
+}
+}
+}
+namespace Doctrine\Common\Annotations
+{
+interface Reader
+{
+function getClassAnnotations(\ReflectionClass $class);
+function getClassAnnotation(\ReflectionClass $class, $annotationName);
+function getMethodAnnotations(\ReflectionMethod $method);
+function getMethodAnnotation(\ReflectionMethod $method, $annotationName);
+function getPropertyAnnotations(\ReflectionProperty $property);
+function getPropertyAnnotation(\ReflectionProperty $property, $annotationName);
+}
+}
+namespace Doctrine\Common\Annotations
+{
+class FileCacheReader implements Reader
+{
+private $reader;
+private $dir;
+private $debug;
+private $loadedAnnotations = array();
+private $classNameHashes = array();
+private $umask;
+public function __construct(Reader $reader, $cacheDir, $debug = false, $umask = 0002)
+{
+if ( ! is_int($umask)) {
+throw new \InvalidArgumentException(sprintf('The parameter umask must be an integer, was: %s',
+gettype($umask)
+));
+}
+$this->reader = $reader;
+$this->umask = $umask;
+if (!is_dir($cacheDir) && !@mkdir($cacheDir, 0777 & (~$this->umask), true)) {
+throw new \InvalidArgumentException(sprintf('The directory "%s" does not exist and could not be created.', $cacheDir));
+}
+$this->dir = rtrim($cacheDir,'\\/');
+$this->debug = $debug;
+}
+public function getClassAnnotations(\ReflectionClass $class)
+{
+if ( ! isset($this->classNameHashes[$class->name])) {
+$this->classNameHashes[$class->name] = sha1($class->name);
+}
+$key = $this->classNameHashes[$class->name];
+if (isset($this->loadedAnnotations[$key])) {
+return $this->loadedAnnotations[$key];
+}
+$path = $this->dir.'/'.strtr($key,'\\','-').'.cache.php';
+if (!is_file($path)) {
+$annot = $this->reader->getClassAnnotations($class);
+$this->saveCacheFile($path, $annot);
+return $this->loadedAnnotations[$key] = $annot;
+}
+if ($this->debug
+&& (false !== $filename = $class->getFilename())
+&& filemtime($path) < filemtime($filename)) {
+@unlink($path);
+$annot = $this->reader->getClassAnnotations($class);
+$this->saveCacheFile($path, $annot);
+return $this->loadedAnnotations[$key] = $annot;
+}
+return $this->loadedAnnotations[$key] = include $path;
+}
+public function getPropertyAnnotations(\ReflectionProperty $property)
+{
+$class = $property->getDeclaringClass();
+if ( ! isset($this->classNameHashes[$class->name])) {
+$this->classNameHashes[$class->name] = sha1($class->name);
+}
+$key = $this->classNameHashes[$class->name].'$'.$property->getName();
+if (isset($this->loadedAnnotations[$key])) {
+return $this->loadedAnnotations[$key];
+}
+$path = $this->dir.'/'.strtr($key,'\\','-').'.cache.php';
+if (!is_file($path)) {
+$annot = $this->reader->getPropertyAnnotations($property);
+$this->saveCacheFile($path, $annot);
+return $this->loadedAnnotations[$key] = $annot;
+}
+if ($this->debug
+&& (false !== $filename = $class->getFilename())
+&& filemtime($path) < filemtime($filename)) {
+@unlink($path);
+$annot = $this->reader->getPropertyAnnotations($property);
+$this->saveCacheFile($path, $annot);
+return $this->loadedAnnotations[$key] = $annot;
+}
+return $this->loadedAnnotations[$key] = include $path;
+}
+public function getMethodAnnotations(\ReflectionMethod $method)
+{
+$class = $method->getDeclaringClass();
+if ( ! isset($this->classNameHashes[$class->name])) {
+$this->classNameHashes[$class->name] = sha1($class->name);
+}
+$key = $this->classNameHashes[$class->name].'#'.$method->getName();
+if (isset($this->loadedAnnotations[$key])) {
+return $this->loadedAnnotations[$key];
+}
+$path = $this->dir.'/'.strtr($key,'\\','-').'.cache.php';
+if (!is_file($path)) {
+$annot = $this->reader->getMethodAnnotations($method);
+$this->saveCacheFile($path, $annot);
+return $this->loadedAnnotations[$key] = $annot;
+}
+if ($this->debug
+&& (false !== $filename = $class->getFilename())
+&& filemtime($path) < filemtime($filename)) {
+@unlink($path);
+$annot = $this->reader->getMethodAnnotations($method);
+$this->saveCacheFile($path, $annot);
+return $this->loadedAnnotations[$key] = $annot;
+}
+return $this->loadedAnnotations[$key] = include $path;
+}
+private function saveCacheFile($path, $data)
+{
+if (!is_writable($this->dir)) {
+throw new \InvalidArgumentException(sprintf('The directory "%s" is not writable. Both, the webserver and the console user need access. You can manage access rights for multiple users with "chmod +a". If your system does not support this, check out the acl package.', $this->dir));
+}
+$tempfile = tempnam($this->dir, uniqid('', true));
+if (false === $tempfile) {
+throw new \RuntimeException(sprintf('Unable to create tempfile in directory: %s', $this->dir));
+}
+$written = file_put_contents($tempfile,'<?php return unserialize('.var_export(serialize($data), true).');');
+if (false === $written) {
+throw new \RuntimeException(sprintf('Unable to write cached file to: %s', $tempfile));
+}
+@chmod($tempfile, 0666 & (~$this->umask));
+if (false === rename($tempfile, $path)) {
+@unlink($tempfile);
+throw new \RuntimeException(sprintf('Unable to rename %s to %s', $tempfile, $path));
+}
+}
+public function getClassAnnotation(\ReflectionClass $class, $annotationName)
+{
+$annotations = $this->getClassAnnotations($class);
+foreach ($annotations as $annotation) {
+if ($annotation instanceof $annotationName) {
+return $annotation;
+}
+}
+return null;
+}
+public function getMethodAnnotation(\ReflectionMethod $method, $annotationName)
+{
+$annotations = $this->getMethodAnnotations($method);
+foreach ($annotations as $annotation) {
+if ($annotation instanceof $annotationName) {
+return $annotation;
+}
+}
+return null;
+}
+public function getPropertyAnnotation(\ReflectionProperty $property, $annotationName)
+{
+$annotations = $this->getPropertyAnnotations($property);
+foreach ($annotations as $annotation) {
+if ($annotation instanceof $annotationName) {
+return $annotation;
+}
+}
+return null;
+}
+public function clearLoadedAnnotations()
+{
+$this->loadedAnnotations = array();
+}
+}
+}
+namespace Doctrine\Common\Annotations
+{
+use SplFileObject;
+final class PhpParser
+{
+public function parseClass(\ReflectionClass $class)
+{
+if (method_exists($class,'getUseStatements')) {
+return $class->getUseStatements();
+}
+if (false === $filename = $class->getFilename()) {
+return array();
+}
+$content = $this->getFileContent($filename, $class->getStartLine());
+if (null === $content) {
+return array();
+}
+$namespace = preg_quote($class->getNamespaceName());
+$content = preg_replace('/^.*?(\bnamespace\s+'. $namespace .'\s*[;{].*)$/s','\\1', $content);
+$tokenizer = new TokenParser('<?php '. $content);
+$statements = $tokenizer->parseUseStatements($class->getNamespaceName());
+return $statements;
+}
+private function getFileContent($filename, $lineNumber)
+{
+if ( ! is_file($filename)) {
+return null;
+}
+$content ='';
+$lineCnt = 0;
+$file = new SplFileObject($filename);
+while (!$file->eof()) {
+if ($lineCnt++ == $lineNumber) {
+break;
+}
+$content .= $file->fgets();
+}
+return $content;
+}
+}
+}
+namespace Doctrine\Common
+{
+use Doctrine\Common\Lexer\AbstractLexer;
+abstract class Lexer extends AbstractLexer
+{
+}
+}
+namespace Doctrine\Common\Persistence
+{
+interface ConnectionRegistry
+{
+public function getDefaultConnectionName();
+public function getConnection($name = null);
+public function getConnections();
+public function getConnectionNames();
+}
+}
+namespace Doctrine\Common\Persistence
+{
+interface Proxy
+{
+const MARKER ='__CG__';
+const MARKER_LENGTH = 6;
+public function __load();
+public function __isInitialized();
+}
+}
+namespace Doctrine\Common\Util
+{
+use Doctrine\Common\Persistence\Proxy;
+class ClassUtils
+{
+public static function getRealClass($class)
+{
+if (false === $pos = strrpos($class,'\\'.Proxy::MARKER.'\\')) {
+return $class;
+}
+return substr($class, $pos + Proxy::MARKER_LENGTH + 2);
+}
+public static function getClass($object)
+{
+return self::getRealClass(get_class($object));
+}
+public static function getParentClass($className)
+{
+return get_parent_class( self::getRealClass( $className ) );
+}
+public static function newReflectionClass($class)
+{
+return new \ReflectionClass( self::getRealClass( $class ) );
+}
+public static function newReflectionObject($object)
+{
+return self::newReflectionClass( self::getClass( $object ) );
+}
+public static function generateProxyClassName($className, $proxyNamespace)
+{
+return rtrim($proxyNamespace,'\\') .'\\'.Proxy::MARKER.'\\'. ltrim($className,'\\');
+}
+}
+}
+namespace Symfony\Component\DependencyInjection
+{
+interface ContainerAwareInterface
+{
+public function setContainer(ContainerInterface $container = null);
+}
+}
+namespace Doctrine\Common\Persistence
+{
+interface ManagerRegistry extends ConnectionRegistry
+{
+public function getDefaultManagerName();
+public function getManager($name = null);
+public function getManagers();
+public function resetManager($name = null);
+public function getAliasNamespace($alias);
+public function getManagerNames();
+public function getRepository($persistentObject, $persistentManagerName = null);
+public function getManagerForClass($class);
+}
+}
+namespace Symfony\Bridge\Doctrine
+{
+use Doctrine\Common\Persistence\ManagerRegistry as ManagerRegistryInterface;
+use Doctrine\ORM\EntityManager;
+interface RegistryInterface extends ManagerRegistryInterface
+{
+public function getDefaultEntityManagerName();
+public function getEntityManager($name = null);
+public function getEntityManagers();
+public function resetEntityManager($name = null);
+public function getEntityNamespace($alias);
+public function getEntityManagerNames();
+public function getEntityManagerForClass($class);
+}
+}
+namespace Symfony\Component\DependencyInjection
+{
+trait ContainerAwareTrait
+{
+protected $container;
+public function setContainer(ContainerInterface $container = null)
+{
+$this->container = $container;
+}
+}
+}
+namespace Doctrine\Common\Persistence
+{
+abstract class AbstractManagerRegistry implements ManagerRegistry
+{
+private $name;
+private $connections;
+private $managers;
+private $defaultConnection;
+private $defaultManager;
+private $proxyInterfaceName;
+public function __construct($name, array $connections, array $managers, $defaultConnection, $defaultManager, $proxyInterfaceName)
+{
+$this->name = $name;
+$this->connections = $connections;
+$this->managers = $managers;
+$this->defaultConnection = $defaultConnection;
+$this->defaultManager = $defaultManager;
+$this->proxyInterfaceName = $proxyInterfaceName;
+}
+abstract protected function getService($name);
+abstract protected function resetService($name);
+public function getName()
+{
+return $this->name;
+}
+public function getConnection($name = null)
+{
+if (null === $name) {
+$name = $this->defaultConnection;
+}
+if (!isset($this->connections[$name])) {
+throw new \InvalidArgumentException(sprintf('Doctrine %s Connection named "%s" does not exist.', $this->name, $name));
+}
+return $this->getService($this->connections[$name]);
+}
+public function getConnectionNames()
+{
+return $this->connections;
+}
+public function getConnections()
+{
+$connections = [];
+foreach ($this->connections as $name => $id) {
+$connections[$name] = $this->getService($id);
+}
+return $connections;
+}
+public function getDefaultConnectionName()
+{
+return $this->defaultConnection;
+}
+public function getDefaultManagerName()
+{
+return $this->defaultManager;
+}
+public function getManager($name = null)
+{
+if (null === $name) {
+$name = $this->defaultManager;
+}
+if (!isset($this->managers[$name])) {
+throw new \InvalidArgumentException(sprintf('Doctrine %s Manager named "%s" does not exist.', $this->name, $name));
+}
+return $this->getService($this->managers[$name]);
+}
+public function getManagerForClass($class)
+{
+if (strpos($class,':') !== false) {
+list($namespaceAlias, $simpleClassName) = explode(':', $class, 2);
+$class = $this->getAliasNamespace($namespaceAlias) .'\\'. $simpleClassName;
+}
+$proxyClass = new \ReflectionClass($class);
+if ($proxyClass->implementsInterface($this->proxyInterfaceName)) {
+if (! $parentClass = $proxyClass->getParentClass()) {
+return null;
+}
+$class = $parentClass->getName();
+}
+foreach ($this->managers as $id) {
+$manager = $this->getService($id);
+if (!$manager->getMetadataFactory()->isTransient($class)) {
+return $manager;
+}
+}
+}
+public function getManagerNames()
+{
+return $this->managers;
+}
+public function getManagers()
+{
+$dms = [];
+foreach ($this->managers as $name => $id) {
+$dms[$name] = $this->getService($id);
+}
+return $dms;
+}
+public function getRepository($persistentObjectName, $persistentManagerName = null)
+{
+return $this->getManager($persistentManagerName)->getRepository($persistentObjectName);
+}
+public function resetManager($name = null)
+{
+if (null === $name) {
+$name = $this->defaultManager;
+}
+if (!isset($this->managers[$name])) {
+throw new \InvalidArgumentException(sprintf('Doctrine %s Manager named "%s" does not exist.', $this->name, $name));
+}
+$this->resetService($this->managers[$name]);
+}
+}
+}
+namespace Symfony\Bridge\Doctrine
+{
+use Symfony\Component\DependencyInjection\ContainerAwareInterface;
+use Symfony\Component\DependencyInjection\ContainerAwareTrait;
+use Doctrine\Common\Persistence\AbstractManagerRegistry;
+abstract class ManagerRegistry extends AbstractManagerRegistry implements ContainerAwareInterface
+{
+use ContainerAwareTrait;
+protected function getService($name)
+{
+return $this->container->get($name);
+}
+protected function resetService($name)
+{
+$this->container->set($name, null);
+}
+}
+}
+namespace Doctrine\Bundle\DoctrineBundle
+{
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Bridge\Doctrine\RegistryInterface;
+use Symfony\Bridge\Doctrine\ManagerRegistry;
+use Doctrine\ORM\ORMException;
+use Doctrine\ORM\EntityManager;
+class Registry extends ManagerRegistry implements RegistryInterface
+{
+public function __construct(ContainerInterface $container, array $connections, array $entityManagers, $defaultConnection, $defaultEntityManager)
+{
+$this->setContainer($container);
+parent::__construct('ORM', $connections, $entityManagers, $defaultConnection, $defaultEntityManager,'Doctrine\ORM\Proxy\Proxy');
+}
+public function getDefaultEntityManagerName()
+{
+trigger_error('getDefaultEntityManagerName is deprecated since Symfony 2.1. Use getDefaultManagerName instead', E_USER_DEPRECATED);
+return $this->getDefaultManagerName();
+}
+public function getEntityManager($name = null)
+{
+trigger_error('getEntityManager is deprecated since Symfony 2.1. Use getManager instead', E_USER_DEPRECATED);
+return $this->getManager($name);
+}
+public function getEntityManagers()
+{
+trigger_error('getEntityManagers is deprecated since Symfony 2.1. Use getManagers instead', E_USER_DEPRECATED);
+return $this->getManagers();
+}
+public function resetEntityManager($name = null)
+{
+trigger_error('resetEntityManager is deprecated since Symfony 2.1. Use resetManager instead', E_USER_DEPRECATED);
+$this->resetManager($name);
+}
+public function getEntityNamespace($alias)
+{
+trigger_error('getEntityNamespace is deprecated since Symfony 2.1. Use getAliasNamespace instead', E_USER_DEPRECATED);
+return $this->getAliasNamespace($alias);
+}
+public function getAliasNamespace($alias)
+{
+foreach (array_keys($this->getManagers()) as $name) {
+try {
+return $this->getManager($name)->getConfiguration()->getEntityNamespace($alias);
+} catch (ORMException $e) {
+}
+}
+throw ORMException::unknownEntityNamespace($alias);
+}
+public function getEntityManagerNames()
+{
+trigger_error('getEntityManagerNames is deprecated since Symfony 2.1. Use getManagerNames instead', E_USER_DEPRECATED);
+return $this->getManagerNames();
+}
+public function getEntityManagerForClass($class)
+{
+trigger_error('getEntityManagerForClass is deprecated since Symfony 2.1. Use getManagerForClass instead', E_USER_DEPRECATED);
+return $this->getManagerForClass($class);
+}
+}
+}
+namespace Sensio\Bundle\FrameworkExtraBundle\EventListener
+{
+use Doctrine\Common\Annotations\Reader;
+use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
+use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\ConfigurationInterface;
+use Doctrine\Common\Util\ClassUtils;
+class ControllerListener implements EventSubscriberInterface
+{
+protected $reader;
+public function __construct(Reader $reader)
+{
+$this->reader = $reader;
+}
+public function onKernelController(FilterControllerEvent $event)
+{
+if (!is_array($controller = $event->getController())) {
+return;
+}
+$className = class_exists('Doctrine\Common\Util\ClassUtils') ? ClassUtils::getClass($controller[0]) : get_class($controller[0]);
+$object = new \ReflectionClass($className);
+$method = $object->getMethod($controller[1]);
+$classConfigurations = $this->getConfigurations($this->reader->getClassAnnotations($object));
+$methodConfigurations = $this->getConfigurations($this->reader->getMethodAnnotations($method));
+$configurations = array();
+foreach (array_merge(array_keys($classConfigurations), array_keys($methodConfigurations)) as $key) {
+if (!array_key_exists($key, $classConfigurations)) {
+$configurations[$key] = $methodConfigurations[$key];
+} elseif (!array_key_exists($key, $methodConfigurations)) {
+$configurations[$key] = $classConfigurations[$key];
+} else {
+if (is_array($classConfigurations[$key])) {
+if (!is_array($methodConfigurations[$key])) {
+throw new \UnexpectedValueException('Configurations should both be an array or both not be an array');
+}
+$configurations[$key] = array_merge($classConfigurations[$key], $methodConfigurations[$key]);
+} else {
+$configurations[$key] = $methodConfigurations[$key];
+}
+}
+}
+$request = $event->getRequest();
+foreach ($configurations as $key => $attributes) {
+$request->attributes->set($key, $attributes);
+}
+}
+protected function getConfigurations(array $annotations)
+{
+$configurations = array();
+foreach ($annotations as $configuration) {
+if ($configuration instanceof ConfigurationInterface) {
+if ($configuration->allowArray()) {
+$configurations['_'.$configuration->getAliasName()][] = $configuration;
+} elseif (!isset($configurations['_'.$configuration->getAliasName()])) {
+$configurations['_'.$configuration->getAliasName()] = $configuration;
+} else {
+throw new \LogicException(sprintf('Multiple "%s" annotations are not allowed.', $configuration->getAliasName()));
+}
+}
+}
+return $configurations;
+}
+public static function getSubscribedEvents()
+{
+return array(
+KernelEvents::CONTROLLER =>'onKernelController',
+);
+}
+}
+}
+namespace Sensio\Bundle\FrameworkExtraBundle\EventListener
+{
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\ParamConverter;
+use Sensio\Bundle\FrameworkExtraBundle\Request\ParamConverter\ParamConverterManager;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
+use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+class ParamConverterListener implements EventSubscriberInterface
+{
+protected $manager;
+protected $autoConvert;
+public function __construct(ParamConverterManager $manager, $autoConvert = true)
+{
+$this->manager = $manager;
+$this->autoConvert = $autoConvert;
+}
+public function onKernelController(FilterControllerEvent $event)
+{
+$controller = $event->getController();
+$request = $event->getRequest();
+$configurations = array();
+if ($configuration = $request->attributes->get('_converters')) {
+foreach (is_array($configuration) ? $configuration : array($configuration) as $configuration) {
+$configurations[$configuration->getName()] = $configuration;
+}
+}
+if (is_array($controller)) {
+$r = new \ReflectionMethod($controller[0], $controller[1]);
+} elseif (is_object($controller) && is_callable($controller,'__invoke')) {
+$r = new \ReflectionMethod($controller,'__invoke');
+} else {
+$r = new \ReflectionFunction($controller);
+}
+if ($this->autoConvert) {
+$configurations = $this->autoConfigure($r, $request, $configurations);
+}
+$this->manager->apply($request, $configurations);
+}
+private function autoConfigure(\ReflectionFunctionAbstract $r, Request $request, $configurations)
+{
+foreach ($r->getParameters() as $param) {
+if (!$param->getClass() || $param->getClass()->isInstance($request)) {
+continue;
+}
+$name = $param->getName();
+if (!isset($configurations[$name])) {
+$configuration = new ParamConverter(array());
+$configuration->setName($name);
+$configuration->setClass($param->getClass()->getName());
+$configurations[$name] = $configuration;
+} elseif (null === $configurations[$name]->getClass()) {
+$configurations[$name]->setClass($param->getClass()->getName());
+}
+$configurations[$name]->setIsOptional($param->isOptional());
+}
+return $configurations;
+}
+public static function getSubscribedEvents()
+{
+return array(
+KernelEvents::CONTROLLER =>'onKernelController',
+);
+}
+}
+}
+namespace Sensio\Bundle\FrameworkExtraBundle\Request\ParamConverter
+{
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\ParamConverter;
+use Symfony\Component\HttpFoundation\Request;
+interface ParamConverterInterface
+{
+public function apply(Request $request, ParamConverter $configuration);
+public function supports(ParamConverter $configuration);
+}
+}
+namespace Sensio\Bundle\FrameworkExtraBundle\Request\ParamConverter
+{
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\ParamConverter;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use DateTime;
+class DateTimeParamConverter implements ParamConverterInterface
+{
+public function apply(Request $request, ParamConverter $configuration)
+{
+$param = $configuration->getName();
+if (!$request->attributes->has($param)) {
+return false;
+}
+$options = $configuration->getOptions();
+$value = $request->attributes->get($param);
+if (!$value && $configuration->isOptional()) {
+return false;
+}
+if (isset($options['format'])) {
+$date = DateTime::createFromFormat($options['format'], $value);
+if (!$date) {
+throw new NotFoundHttpException('Invalid date given.');
+}
+} else {
+if (false === strtotime($value)) {
+throw new NotFoundHttpException('Invalid date given.');
+}
+$date = new DateTime($value);
+}
+$request->attributes->set($param, $date);
+return true;
+}
+public function supports(ParamConverter $configuration)
+{
+if (null === $configuration->getClass()) {
+return false;
+}
+return'DateTime'=== $configuration->getClass();
+}
+}
+}
+namespace Sensio\Bundle\FrameworkExtraBundle\Request\ParamConverter
+{
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\ParamConverter;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpFoundation\Request;
+use Doctrine\Common\Persistence\ManagerRegistry;
+use Doctrine\ORM\NoResultException;
+class DoctrineParamConverter implements ParamConverterInterface
+{
+protected $registry;
+public function __construct(ManagerRegistry $registry = null)
+{
+$this->registry = $registry;
+}
+public function apply(Request $request, ParamConverter $configuration)
+{
+$name = $configuration->getName();
+$class = $configuration->getClass();
+$options = $this->getOptions($configuration);
+if (null === $request->attributes->get($name, false)) {
+$configuration->setIsOptional(true);
+}
+if (false === $object = $this->find($class, $request, $options, $name)) {
+if (false === $object = $this->findOneBy($class, $request, $options)) {
+if ($configuration->isOptional()) {
+$object = null;
+} else {
+throw new \LogicException('Unable to guess how to get a Doctrine instance from the request information.');
+}
+}
+}
+if (null === $object && false === $configuration->isOptional()) {
+throw new NotFoundHttpException(sprintf('%s object not found.', $class));
+}
+$request->attributes->set($name, $object);
+return true;
+}
+protected function find($class, Request $request, $options, $name)
+{
+if ($options['mapping'] || $options['exclude']) {
+return false;
+}
+$id = $this->getIdentifier($request, $options, $name);
+if (false === $id || null === $id) {
+return false;
+}
+if (isset($options['repository_method'])) {
+$method = $options['repository_method'];
+} else {
+$method ='find';
+}
+try {
+return $this->getManager($options['entity_manager'], $class)->getRepository($class)->$method($id);
+} catch (NoResultException $e) {
+return;
+}
+}
+protected function getIdentifier(Request $request, $options, $name)
+{
+if (isset($options['id'])) {
+if (!is_array($options['id'])) {
+$name = $options['id'];
+} elseif (is_array($options['id'])) {
+$id = array();
+foreach ($options['id'] as $field) {
+$id[$field] = $request->attributes->get($field);
+}
+return $id;
+}
+}
+if ($request->attributes->has($name)) {
+return $request->attributes->get($name);
+}
+if ($request->attributes->has('id') && !isset($options['id'])) {
+return $request->attributes->get('id');
+}
+return false;
+}
+protected function findOneBy($class, Request $request, $options)
+{
+if (!$options['mapping']) {
+$keys = $request->attributes->keys();
+$options['mapping'] = $keys ? array_combine($keys, $keys) : array();
+}
+foreach ($options['exclude'] as $exclude) {
+unset($options['mapping'][$exclude]);
+}
+if (!$options['mapping']) {
+return false;
+}
+if (isset($options['id']) && null === $request->attributes->get($options['id'])) {
+return false;
+}
+$criteria = array();
+$em = $this->getManager($options['entity_manager'], $class);
+$metadata = $em->getClassMetadata($class);
+$mapMethodSignature = isset($options['repository_method'])
+&& isset($options['map_method_signature'])
+&& $options['map_method_signature'] === true;
+foreach ($options['mapping'] as $attribute => $field) {
+if ($metadata->hasField($field)
+|| ($metadata->hasAssociation($field) && $metadata->isSingleValuedAssociation($field))
+|| $mapMethodSignature) {
+$criteria[$field] = $request->attributes->get($attribute);
+}
+}
+if ($options['strip_null']) {
+$criteria = array_filter($criteria, function ($value) { return !is_null($value); });
+}
+if (!$criteria) {
+return false;
+}
+if (isset($options['repository_method'])) {
+$repositoryMethod = $options['repository_method'];
+} else {
+$repositoryMethod ='findOneBy';
+}
+try {
+if ($mapMethodSignature) {
+return $this->findDataByMapMethodSignature($em, $class, $repositoryMethod, $criteria);
+}
+return $em->getRepository($class)->$repositoryMethod($criteria);
+} catch (NoResultException $e) {
+return;
+}
+}
+private function findDataByMapMethodSignature($em, $class, $repositoryMethod, $criteria)
+{
+$arguments = array();
+$repository = $em->getRepository($class);
+$ref = new \ReflectionMethod($repository, $repositoryMethod);
+foreach ($ref->getParameters() as $parameter) {
+if (array_key_exists($parameter->name, $criteria)) {
+$arguments[] = $criteria[$parameter->name];
+} elseif ($parameter->isDefaultValueAvailable()) {
+$arguments[] = $parameter->getDefaultValue();
+} else {
+throw new \InvalidArgumentException(sprintf('Repository method "%s::%s" requires that you provide a value for the "$%s" argument.', get_class($repository), $repositoryMethod, $parameter->name));
+}
+}
+return $ref->invokeArgs($repository, $arguments);
+}
+public function supports(ParamConverter $configuration)
+{
+if (null === $this->registry || !count($this->registry->getManagers())) {
+return false;
+}
+if (null === $configuration->getClass()) {
+return false;
+}
+$options = $this->getOptions($configuration);
+$em = $this->getManager($options['entity_manager'], $configuration->getClass());
+if (null === $em) {
+return false;
+}
+return !$em->getMetadataFactory()->isTransient($configuration->getClass());
+}
+protected function getOptions(ParamConverter $configuration)
+{
+return array_replace(array('entity_manager'=> null,'exclude'=> array(),'mapping'=> array(),'strip_null'=> false,
+), $configuration->getOptions());
+}
+private function getManager($name, $class)
+{
+if (null === $name) {
+return $this->registry->getManagerForClass($class);
+}
+return $this->registry->getManager($name);
+}
+}
+}
+namespace Sensio\Bundle\FrameworkExtraBundle\Request\ParamConverter
+{
+use Symfony\Component\HttpFoundation\Request;
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\ConfigurationInterface;
+class ParamConverterManager
+{
+protected $converters = array();
+protected $namedConverters = array();
+public function apply(Request $request, $configurations)
+{
+if (is_object($configurations)) {
+$configurations = array($configurations);
+}
+foreach ($configurations as $configuration) {
+$this->applyConverter($request, $configuration);
+}
+}
+protected function applyConverter(Request $request, ConfigurationInterface $configuration)
+{
+$value = $request->attributes->get($configuration->getName());
+$className = $configuration->getClass();
+if (is_object($value) && $value instanceof $className) {
+return;
+}
+if ($converterName = $configuration->getConverter()) {
+if (!isset($this->namedConverters[$converterName])) {
+throw new \RuntimeException(sprintf("No converter named '%s' found for conversion of parameter '%s'.",
+$converterName, $configuration->getName()
+));
+}
+$converter = $this->namedConverters[$converterName];
+if (!$converter->supports($configuration)) {
+throw new \RuntimeException(sprintf("Converter '%s' does not support conversion of parameter '%s'.",
+$converterName, $configuration->getName()
+));
+}
+$converter->apply($request, $configuration);
+return;
+}
+foreach ($this->all() as $converter) {
+if ($converter->supports($configuration)) {
+if ($converter->apply($request, $configuration)) {
+return;
+}
+}
+}
+}
+public function add(ParamConverterInterface $converter, $priority = 0, $name = null)
+{
+if ($priority !== null) {
+if (!isset($this->converters[$priority])) {
+$this->converters[$priority] = array();
+}
+$this->converters[$priority][] = $converter;
+}
+if (null !== $name) {
+$this->namedConverters[$name] = $converter;
+}
+}
+public function all()
+{
+krsort($this->converters);
+$converters = array();
+foreach ($this->converters as $all) {
+$converters = array_merge($converters, $all);
+}
+return $converters;
+}
+}
+}
+namespace Sensio\Bundle\FrameworkExtraBundle\EventListener
+{
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
+use Symfony\Component\HttpKernel\Event\GetResponseForControllerResultEvent;
+use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
+class TemplateListener implements EventSubscriberInterface
+{
+protected $container;
+public function __construct(ContainerInterface $container)
+{
+$this->container = $container;
+}
+public function onKernelController(FilterControllerEvent $event)
+{
+$request = $event->getRequest();
+$template = $request->attributes->get('_template');
+if (null === $template) {
+return;
+}
+if (!$template instanceof Template) {
+throw new \InvalidArgumentException('Request attribute "_template" is reserved for @Template annotations.');
+}
+$template->setOwner($controller = $event->getController());
+if (null === $template->getTemplate()) {
+$guesser = $this->container->get('sensio_framework_extra.view.guesser');
+$template->setTemplate($guesser->guessTemplateName($controller, $request, $template->getEngine()));
+}
+}
+public function onKernelView(GetResponseForControllerResultEvent $event)
+{
+$request = $event->getRequest();
+$template = $request->attributes->get('_template');
+if (null === $template) {
+return;
+}
+$parameters = $event->getControllerResult();
+$owner = $template->getOwner();
+list($controller, $action) = $owner;
+if (null === $parameters) {
+$parameters = $this->resolveDefaultParameters($request, $template, $controller, $action);
+}
+$templating = $this->container->get('templating');
+if ($template->isStreamable()) {
+$callback = function () use ($templating, $template, $parameters) {
+return $templating->stream($template->getTemplate(), $parameters);
+};
+$event->setResponse(new StreamedResponse($callback));
+}
+$template->setOwner(array());
+$event->setResponse($templating->renderResponse($template->getTemplate(), $parameters));
+}
+public static function getSubscribedEvents()
+{
+return array(
+KernelEvents::CONTROLLER => array('onKernelController', -128),
+KernelEvents::VIEW =>'onKernelView',
+);
+}
+private function resolveDefaultParameters(Request $request, Template $template, $controller, $action)
+{
+$parameters = array();
+$arguments = $template->getVars();
+if (0 === count($arguments)) {
+$r = new \ReflectionObject($controller);
+$arguments = array();
+foreach ($r->getMethod($action)->getParameters() as $param) {
+$arguments[] = $param->getName();
+}
+}
+foreach ($arguments as $argument) {
+$parameters[$argument] = $request->attributes->get($argument);
+}
+return $parameters;
+}
+}
+}
+namespace Sensio\Bundle\FrameworkExtraBundle\EventListener
+{
+use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
+use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
+use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
+class HttpCacheListener implements EventSubscriberInterface
+{
+private $lastModifiedDates;
+private $etags;
+private $expressionLanguage;
+public function __construct()
+{
+$this->lastModifiedDates = new \SplObjectStorage();
+$this->etags = new \SplObjectStorage();
+}
+public function onKernelController(FilterControllerEvent $event)
+{
+$request = $event->getRequest();
+if (!$configuration = $request->attributes->get('_cache')) {
+return;
+}
+$response = new Response();
+$lastModifiedDate ='';
+if ($configuration->getLastModified()) {
+$lastModifiedDate = $this->getExpressionLanguage()->evaluate($configuration->getLastModified(), $request->attributes->all());
+$response->setLastModified($lastModifiedDate);
+}
+$etag ='';
+if ($configuration->getETag()) {
+$etag = hash('sha256', $this->getExpressionLanguage()->evaluate($configuration->getETag(), $request->attributes->all()));
+$response->setETag($etag);
+}
+if ($response->isNotModified($request)) {
+$event->setController(function () use ($response) {
+return $response;
+});
+} else {
+if ($etag) {
+$this->etags[$request] = $etag;
+}
+if ($lastModifiedDate) {
+$this->lastModifiedDates[$request] = $lastModifiedDate;
+}
+}
+}
+public function onKernelResponse(FilterResponseEvent $event)
+{
+$request = $event->getRequest();
+if (!$configuration = $request->attributes->get('_cache')) {
+return;
+}
+$response = $event->getResponse();
+if (!in_array($response->getStatusCode(), array(200, 203, 300, 301, 302, 304, 404, 410))) {
+return;
+}
+if (null !== $age = $configuration->getSMaxAge()) {
+if (!is_numeric($age)) {
+$now = microtime(true);
+$age = ceil(strtotime($configuration->getSMaxAge(), $now) - $now);
+}
+$response->setSharedMaxAge($age);
+}
+if (null !== $age = $configuration->getMaxAge()) {
+if (!is_numeric($age)) {
+$now = microtime(true);
+$age = ceil(strtotime($configuration->getMaxAge(), $now) - $now);
+}
+$response->setMaxAge($age);
+}
+if (null !== $configuration->getExpires()) {
+$date = \DateTime::createFromFormat('U', strtotime($configuration->getExpires()), new \DateTimeZone('UTC'));
+$response->setExpires($date);
+}
+if (null !== $configuration->getVary()) {
+$response->setVary($configuration->getVary());
+}
+if ($configuration->isPublic()) {
+$response->setPublic();
+}
+if ($configuration->isPrivate()) {
+$response->setPrivate();
+}
+if (isset($this->lastModifiedDates[$request])) {
+$response->setLastModified($this->lastModifiedDates[$request]);
+unset($this->lastModifiedDates[$request]);
+}
+if (isset($this->etags[$request])) {
+$response->setETag($this->etags[$request]);
+unset($this->etags[$request]);
+}
+$event->setResponse($response);
+}
+public static function getSubscribedEvents()
+{
+return array(
+KernelEvents::CONTROLLER =>'onKernelController',
+KernelEvents::RESPONSE =>'onKernelResponse',
+);
+}
+private function getExpressionLanguage()
+{
+if (null === $this->expressionLanguage) {
+if (!class_exists('Symfony\Component\ExpressionLanguage\ExpressionLanguage')) {
+throw new \RuntimeException('Unable to use expressions as the Symfony ExpressionLanguage component is not installed.');
+}
+$this->expressionLanguage = new ExpressionLanguage();
+}
+return $this->expressionLanguage;
+}
+}
+}
+namespace Sensio\Bundle\FrameworkExtraBundle\EventListener
+{
+use Sensio\Bundle\FrameworkExtraBundle\Security\ExpressionLanguage;
+use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
+use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\Security\Core\Authentication\AuthenticationTrustResolverInterface;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+use Symfony\Component\Security\Core\SecurityContextInterface;
+use Symfony\Component\Security\Core\Exception\AccessDeniedException;
+use Symfony\Component\Security\Core\Role\RoleHierarchyInterface;
+class SecurityListener implements EventSubscriberInterface
+{
+private $tokenStorage;
+private $authChecker;
+private $language;
+private $trustResolver;
+private $roleHierarchy;
+public function __construct(SecurityContextInterface $securityContext = null, ExpressionLanguage $language = null, AuthenticationTrustResolverInterface $trustResolver = null, RoleHierarchyInterface $roleHierarchy = null, TokenStorageInterface $tokenStorage = null, AuthorizationCheckerInterface $authChecker = null)
+{
+$this->tokenStorage = $tokenStorage ?: $securityContext;
+$this->authChecker = $authChecker ?: $securityContext;
+$this->language = $language;
+$this->trustResolver = $trustResolver;
+$this->roleHierarchy = $roleHierarchy;
+}
+public function onKernelController(FilterControllerEvent $event)
+{
+$request = $event->getRequest();
+if (!$configuration = $request->attributes->get('_security')) {
+return;
+}
+if (null === $this->tokenStorage || null === $this->trustResolver) {
+throw new \LogicException('To use the @Security tag, you need to install the Symfony Security bundle.');
+}
+if (null === $this->tokenStorage->getToken()) {
+throw new \LogicException('To use the @Security tag, your controller needs to be behind a firewall.');
+}
+if (null === $this->language) {
+throw new \LogicException('To use the @Security tag, you need to use the Security component 2.4 or newer and to install the ExpressionLanguage component.');
+}
+if (!$this->language->evaluate($configuration->getExpression(), $this->getVariables($request))) {
+throw new AccessDeniedException(sprintf('Expression "%s" denied access.', $configuration->getExpression()));
+}
+}
+private function getVariables(Request $request)
+{
+$token = $this->tokenStorage->getToken();
+if (null !== $this->roleHierarchy) {
+$roles = $this->roleHierarchy->getReachableRoles($token->getRoles());
+} else {
+$roles = $token->getRoles();
+}
+$variables = array('token'=> $token,'user'=> $token->getUser(),'object'=> $request,'request'=> $request,'roles'=> array_map(function ($role) { return $role->getRole(); }, $roles),'trust_resolver'=> $this->trustResolver,'auth_checker'=> $this->authChecker,
+);
+return array_merge($request->attributes->all(), $variables);
+}
+public static function getSubscribedEvents()
+{
+return array(KernelEvents::CONTROLLER =>'onKernelController');
+}
+}
+}
+namespace Sensio\Bundle\FrameworkExtraBundle\Configuration
+{
+interface ConfigurationInterface
+{
+public function getAliasName();
+public function allowArray();
+}
+}
+namespace Sensio\Bundle\FrameworkExtraBundle\Configuration
+{
+abstract class ConfigurationAnnotation implements ConfigurationInterface
+{
+public function __construct(array $values)
+{
+foreach ($values as $k => $v) {
+if (!method_exists($this, $name ='set'.$k)) {
+throw new \RuntimeException(sprintf('Unknown key "%s" for annotation "@%s".', $k, get_class($this)));
+}
+$this->$name($v);
+}
 }
 }
 }
