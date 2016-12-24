@@ -6,6 +6,8 @@ use AppBundle\Entity\Personne;
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 use Symfony\Component\HttpFoundation\Request;
 use AppBundle\Entity\Identification;
+use Symfony\Component\HttpFoundation\Session\Session;
+
 /**
  * Personne controller.
  *
@@ -69,7 +71,19 @@ class PersonneController extends Controller
                   if ($p->getPseudoPersonne() == $identification->getPseudo() &&
                      $p->getMdpPersonne() == $identification->getMdp())
                      {
-                         return $this->redirectToRoute('listProduit');
+                     	/*on recupere la session*/ 
+                     	$session = $request->getSession();
+                     	
+                     	/*on cree et assigne les attributs de la session*/
+                     	$session->set('id_personne', $p->getIdPersonne());
+                     	$session->set('pseudo_personne', $p->getPseudoPersonne());
+                     	$session->set('type_personne', $p->getTypePersonne());
+                     	
+                     	/*Si un client se connecte*/
+                     	if( strcmp($session->get('type_personne'),"Client") == 0 )
+                     	  return $this->redirectToRoute('liste_paniers_client');
+                     	else
+                     	  return $this->redirectToRoute('listMagasinierProduit');
                      }
               }
           }

@@ -13,10 +13,11 @@ class ListePaniersController extends Controller
 {
 	public function listPaniersAction(Request $request)
 	{
+		$session = $request->getSession();
 		$em = $this->getDoctrine()->getManager();
 		
 		//on cherche tout les paniers du client
-		$paniers = $em->getRepository(Panier::class)->findBy(array('id_personne' => '1'));
+		$paniers = $em->getRepository(Panier::class)->findBy(array('id_personne' => $session->get('id_personne')));
 		
 		
 		return $this->render('client/liste_paniers_client.twig',['Panier' => $paniers]);
