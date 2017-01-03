@@ -1,0 +1,91 @@
+app:
+    resource: "@AppBundle/Controller/"
+    type:     annotation
+
+listProduit:
+    path: /produits/list.{_format}
+    defaults: {_controller: AppBundle:Produit:listProduit, _format: "html"}
+    
+        
+panier_client:
+    path: /client/panier
+    defaults: {_controller: AppBundle:CreationPanier:index}
+        
+creation_panier_client:
+    path: /client/creation_panier
+    defaults: {_controller: AppBundle:CreationPanier:newPanier}
+        
+ajout_dans_panier_client:
+    path: /client/ajout_panier/{id_panier}/{ref}/{qtt}
+    defaults: {_controller: AppBundle:CreationPanier:addToPanier}
+        
+liste_paniers_client: 
+    path: /client/liste_paniers
+    defaults: {_controller: AppBundle:ListePaniers:listPaniers}
+        
+contenu_panier_client:
+    path: /client/panier/{id_panier}
+    defaults: {_controller: AppBundle:ListePaniers:viewPanier}
+        
+delete_panier_client:
+    path: /client/delete_panier/{id_panier}
+    defaults: {_controller: AppBundle:CreationPanier:delPanier}
+        
+validate_panier_client:
+    path: /client/validate_panier/{id_panier}
+    defaults: {_controller: AppBundle:CreationPanier:validatePanier}
+        
+liste_paniers_magasinier: 
+    path: /magasinier/liste_paniers
+    defaults: {_controller: AppBundle:GestionPaniersMagasinier:listPaniers}
+        
+gestion_panier_magasinier:
+    path: /magasinier/gestion_panier/{id_panier}
+    defaults: {_controller: AppBundle:GestionPaniersMagasinier:gestionPanier}
+    
+gestion_panier_produit_magasinier:
+    path: /magasinier/produit_gestion_panier/{id_panier}/{ref}/{qtt}
+    defaults: {_controller: AppBundle:GestionPaniersMagasinier:gestionPanierProduit}
+        
+gestion_panier_valider_magasinier:
+    path: /magasinier/valider_gestion_panier/{id_panier}
+    defaults: {_controller: AppBundle:GestionPaniersMagasinier:gestionPanierValider}
+
+listMagasinierProduit:
+    path: /magasinier/produits/list
+    defaults: {_controller: AppBundle:Produit:listMagasinierProduit}
+
+listStockProduit:
+    path: /magasinier/produits/list/stock.{_format}
+    defaults: {_controller: AppBundle:Produit:listStocksProduit, _format: "html"}
+
+listAlerte:
+    path: /magasinier/alertes/list
+
+updateProduit:
+    path: /magasinier/produits/update/{numero}
+    defaults: {_controller: AppBundle:Produit:updateProduit}
+
+updateStock:
+    path: /magasinier/produits/update/stock/{numero}
+    defaults: {_controller: AppBundle:Produit:updateStockProduit}
+
+ajoutProduit:
+    path: /magasinier/produits/ajout
+    defaults: {_controller: AppBundle:Produit:addProduit}
+
+affichePersonne:
+    path: /personne/list
+    defaults: {_controller: AppBundle:Personne:index}
+
+montrePersonne:
+    path: /personne/show
+    defaults: {_controller: AppBundle:Personne:show}
+
+personne_new:
+    path: /personne/new
+    defaults: {_controller: AppBundle:Personne:new}
+
+identification:
+    path: /identification
+    defaults: {_controller: AppBundle:Personne:identification}
