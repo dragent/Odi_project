@@ -10,8 +10,18 @@ use AppBundle\Entity\Produit;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 
+/**
+*   Contrôleur en charge de la gestion des produits.
+*/
 class ProduitController extends Controller{
 
+    /**
+    *   Action qui liste les produits pour le client.
+    *
+    *   @param $_format : Format de la liste (HTML par défaut).
+    *
+    *   @return La page html.twig de la liste des produits pour le client.
+    */
     public function listProduitAction($message, $_format) {
 
         $em = $this->getDoctrine()->getManager();
@@ -20,6 +30,13 @@ class ProduitController extends Controller{
         return $this->render('produits/list.'.$_format.'.twig', ['produits' => $produits, 'msg' => $message]);
     }
 
+    /**
+    *   Action qui liste les produits pour le magasinier.
+    *
+    *   @param $message : Un message (inutile).
+    *
+    *   @return La page html.twig de la liste des produits pour le magasinier.
+    */
     public function listMagasinierProduitAction($message) {
 
         $em = $this->getDoctrine()->getManager();
@@ -28,6 +45,14 @@ class ProduitController extends Controller{
         return $this->render('magasinier/liste_magasinier.html.twig', ['produits' => $produits, 'msg' => $message]);
     }
 
+    /**
+    *   Action qui liste les stocks des produits.
+    *
+    *   @param $_format : Format de la liste (HTML par défaut).
+    *   @param $message : Un message (inutile).
+    *
+    *   @return La page html.twig de la liste des stocks de produits.
+    */
     public function listStocksProduitAction($message, $_format) {
 
         $em = $this->getDoctrine()->getManager();
@@ -36,6 +61,11 @@ class ProduitController extends Controller{
         return $this->render('magasinier/stocks.'.$_format.'.twig', ['produits' => $produits, 'msg' => $message]);
     }
 
+    /**
+    *   Action qui ajoute un produit.
+    *
+    *   @return La page html.twig du formulaire d'ajout de produit.
+    */
     public function addProduitAction(Request $request) {
 
         // creer le formulaire
@@ -45,20 +75,32 @@ class ProduitController extends Controller{
         return $this->handleForm($form, $produit, $request, "Ajout", "Ajouter un produit");
     }
 
+    /**
+    *   Action qui met à jour les informations des produits.
+    *
+    *   @param $numero : La référence du produit à mettre à jour.
+    *
+    *   @return La page html.twig du formulaire des produits.
+    */    
     public function updateProduitAction(Request $request, $numero) {
 
         $em = $this->getDoctrine()->getManager();
-        // recup en utilisant les 2 colonnes de la cle primaire
         $produit = $em->getRepository(Produit::class)->find($numero);
         $form = $this->createForm(ProduitsInfosType::class, $produit, ["method" => 'POST']);
 
         return $this->handleForm($form, $produit, $request, "Modification", "Modifier un produit");
     }
 
+    /**
+    *   Action qui met à jour les stocks des produits.
+    *
+    *   @param $numero : La référence du produit à mettre à jour.
+    *
+    *   @return La page html.twig du formulaire des produits.
+    */
     public function updateStockProduitAction(Request $request, $numero) {
 
         $em = $this->getDoctrine()->getManager();
-        // recup en utilisant les 2 colonnes de la cle primaire
         $produit = $em->getRepository(Produit::class)->find($numero);
         $form = $this->createForm(ProduitsStocksType::class, $produit, ["method" => 'POST']);
 
@@ -76,7 +118,6 @@ class ProduitController extends Controller{
             $em->persist($produit);
             $em->flush();
 
-            // rediriger vers accueil avec un message de succes
             return $this->redirectToRoute('listMagasinierProduit');
          }
         // formulaire non valide ou 1er acces : afficher le formulaire

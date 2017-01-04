@@ -9,8 +9,16 @@ use AppBundle\Entity\Panier;
 use AppBundle\Entity\Contenir;
 use AppBundle\Entity\Produit; 
 
+/**
+*	Contrôleur en charge de la gestion des paniers pour un magasinier.
+*/
 class GestionPaniersMagasinierController extends Controller 
 {
+	/**
+	*	Action qui liste les paniers validés par l'utilisateur.
+	*
+	*	@return La page html.twig de la liste des paniers validés.
+	*/
 	public function listPaniersAction(Request $request)
 	{
 		$em = $this->getDoctrine()->getManager();
@@ -21,6 +29,13 @@ class GestionPaniersMagasinierController extends Controller
 		return $this->render('magasinier/liste_paniers_magasinier.twig',['Panier' => $paniers]);
 	}
 	
+	/**
+	*	Action qui gère un panier sélectionné par le magasinier.
+	*
+	*	@param $id_panier : L'identifiant du panier à gérer.
+	*
+	*	@return La page html.twig de gestion des paniers par le magasinier.
+	*/
 	public function gestionPanierAction(Request $request,$id_panier)
 	{
 		$em = $this->getDoctrine()->getManager();
@@ -33,7 +48,15 @@ class GestionPaniersMagasinierController extends Controller
 		return $this->render('magasinier/gestion_panier_magasinier.twig',['Contenir' => $contenir, 'Panier' => $panier, 'Produit' => $produit]);
 	}
 	
-	
+	/**
+	*	Action qui gère la quantité de produit pouvant être distribuée dans le panier à gérer.
+	*
+	*	@param $ref : La référence du produit.
+	*	@param $id_panier : L'identifiant du panier à gérer.
+	*	@param $qtt : La quantité du produit à distribuer dans le panier.
+	*
+	*	@return La page html.twig de la gestion des paniers par le magasinier.
+	*/
 	public function gestionPanierProduitAction(Request $request, $ref, $id_panier, $qtt){
 		$em = $this->getDoctrine()->getManager();
 		
@@ -60,6 +83,13 @@ class GestionPaniersMagasinierController extends Controller
 		return $this->render('magasinier/gestion_panier_magasinier.twig',['Contenir' => $contenir, 'Panier' => $panier, 'Produit' => $produit]);
 	}
 	
+	/**
+	*	Action qui gère la validation d'un panier par le magasinier.
+	*
+	*	@param $id_panier : L'identifiant du panier à valider.
+	*
+	*	@return La page html.twig de la liste des paniers validés par le client.
+	*/
 	public function gestionPanierValiderAction(Request $request, $id_panier){
 		$em = $this->getDoctrine()->getManager();
 		

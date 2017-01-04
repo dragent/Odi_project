@@ -24,7 +24,8 @@ class IdentificationType extends AbstractType
                   array('required' => true, 'label' => 'Pseudo'))
 
             ->add('mdp', PasswordType::class, 
-                  array('required' => true, 'label' => 'Mot de passe'))
+                  array('required' => true, 'label' => 'Mot de passe', 'always_empty'=>true
+                ))
 
             ->add('save', SubmitType::class, array('label' => 'Connexion', 'attr' => array('class' => 'btn btn-primary')));
     }
