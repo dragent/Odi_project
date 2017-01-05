@@ -1,12 +1,12 @@
 # This file is auto-generated during the composer install
 parameters:
     database_host: 127.0.0.1
-    database_port: null
-    database_name: test
+    database_port: 
+    database_name: projet_odi
     database_user: root
-    database_password: null
+    database_password: ingodwetrust1776
     mailer_transport: smtp
     mailer_host: 127.0.0.1
     mailer_user: null
     mailer_password: null
-    secret: 47fa9d459ebd52b5a267db3bd8695aae83e5be31
+    secret: 2ea29274cad72ae6e684760e9813cf704fc276f4

@@ -5,20 +5,17 @@
 {% endblock %}
 
 {% block menu %}
-    {#{% if magasinier %}
-        {% include 'menu_magasinier.twig' %}
-    {% endif %}#}
+
     {% include 'magasinier/menu_magasinier.twig' %}
+    
 {% endblock %}
 
 {% block header %}
-    {#{% if magasinier %}#}
+
     <div class="page-header">
         <h2 class="centrer isoler">{{ titre }}</h2>
     </div>
-    {#{% else %}#}
-        {#<h1 class="centrer">Erreur 404 : Page introuvable.</h1>#}
-    {#{% endif %}#}
+
 {% endblock %}
 
 {% block section %}

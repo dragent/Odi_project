@@ -28,7 +28,7 @@
               <td>{{ paniers.getIdPanier() }}</td>
               <td>{{ paniers.getIdPersonne() }}</td>
               <td>{{ paniers.getDatePanier() | date("d/m/Y")}}</td>
-              <td><a class="btn btn-primary" href="{{ path('gestion_panier_magasinier', { id_panier : paniers.getIdPanier() }) }}">Gérer</a></td>
+              <td><a class="btn btn-primary" href="{{ path('gestionPanierMagasinier', { id_panier : paniers.getIdPanier() }) }}">Gérer</a></td>
             </tr>
           {% endfor %}
           </tbody>
@@ -37,7 +37,4 @@
        <p class="centrer">Aucun panier dans la base.</p>
     {% endif %}
   </div>
-{% endblock %}
-
-{% block footer %}
 {% endblock %}

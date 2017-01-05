@@ -24,25 +24,31 @@
         </tr>
       </thead>
       <tbody>
-      {% set cpt=0 %}
-      {% for contenir in Contenir %}
-        {% set cpt = cpt+1 %} 
+        {% set cpt=0 %}
+
+        {% for contenir in Contenir %}
+          {% set cpt = cpt+1 %} 
 	        <tr>
             <td>{{ contenir.getRefProduit() }}</td>
+
             {% for produit in Produit %}
             {% if produit.getRefProduit() == contenir.getRefProduit() %}
               <td>{{ produit.getNomProduit() }}</td>
             {% endif %}
             {% endfor %}
+
             <td>{{ contenir.getQuantiteProduit() - contenir.getQuantiteProduitGeree() }}</td>
+
             {% for produit in Produit %}
             {% if produit.getRefProduit() == contenir.getRefProduit() %}
               <td>{{ produit.getQuantiteProduit() }}</td>
             {% endif %}
             {% endfor %}
+
             <td>
               <input type="number" id="qtt{{ cpt }}" value="1"></input>
             </td>
+
             <td>
               {% if (contenir.getQuantiteProduit() - contenir.getQuantiteProduitGeree()) == 0 %}
                 OK
@@ -51,62 +57,61 @@
               {% endif %}
             </td>
           </tr>
-      {% endfor %}
+        {% endfor %}
       </tbody>
     </table>
-      {% set validate = 1 %}
-      {% for contenir in Contenir %}
-        {% if (contenir.getQuantiteProduit() - contenir.getQuantiteProduitGeree()) > 0 %}
-          {% set validate = 0 %}
-        {% endif %}
-      {% endfor %}
-      
-      {% if validate == 1 %}
-        <a type="button" class="btn btn-success btn-sm" href="{{ path('gestion_panier_valider_magasinier', { id_panier : Panier.getIdPanier() }) }}" >Valider panier</a>
-      {% else %}
-        <a type="button" class="btn btn-danger btn-sm" href="#" >Valider panier</a>
+
+    {% set validate = 1 %}
+    {% for contenir in Contenir %}
+      {% if (contenir.getQuantiteProduit() - contenir.getQuantiteProduitGeree()) > 0 %}
+        {% set validate = 0 %}
       {% endif %}
-  </div>
-      
-      
-      
-      
-  <script>
-  function confirme(cpt,id_panier,ref){
-	var qtt = $("#qtt"+cpt).val();
-    //alert("cpt="+cpt+" ref="+ref+" idpanier="+id_panier+" qtt="+qtt);
+    {% endfor %}
     
-    //on recupere l'url
-   	var str = location.href;
-   	var lgth = str.length;
+    {% if validate == 1 %}
+      <a type="button" class="btn btn-success btn-sm" href="{{ path('gestionPanierValidationMagasinier', { id_panier : Panier.getIdPanier() }) }}" >Valider panier</a>
+    {% else %}
+      <a type="button" class="btn btn-danger btn-sm" href="#" >Valider panier</a>
+    {% endif %}
 
-   	//taille de "gestion_panier/"+id_panier
-   	var lgthFin = "gestion_panier/"+id_panier;
-   	lgthFin = lgthFin.length;
+  </div>
+   
+  <script>
+  /*var str = location.href;
+      var lgth = str.length;
 
-
-   	//on recupere la partie de l'url devant(ou pas) contenir "creation_panier"
-   	var test = str.substring(lgth-lgthFin, lgth);
-   	var res = str.substring(0, lgth-lgthFin);
-
-   	//alert("res="+res+"  test="+test);	
-    //on test et on modifie en consequence
-   	if(test.localeCompare("gestion_panier")==0)
-   	  res += "produit_gestion_panier/"+id_panier+"/"+ref+"/"+qtt;
-    else{
-      res = str.substring(0, lgth-(lgth-str.indexOf("/magasinier")));
-      res += "/magasinier/produit_gestion_panier/"+id_panier+"/"+ref+"/"+qtt;
-
+      var test = str.substring(lgth-16, lgth);
+      var res = str.substring(0, lgth-16);
+      alert("localeCompare="+test+" res="+res);*/
+    function confirme(cpt,id_panier,ref){
+  	var qtt = $("#qtt"+cpt).val();
+      //alert("cpt="+cpt+" ref="+ref+" idpanier="+id_panier+" qtt="+qtt);
       
+      //on recupere l'url
+     	var str = location.href;
+     	var lgth = str.length;
+
+     	//taille de "paniers/gestion/"+id_panier
+     	var lgthFin = "paniers/gestion/"+id_panier;
+     	lgthFin = lgthFin.length;
+
+     	var test = str.substring(lgth-lgthFin, lgth);
+     	var res = str.substring(0, lgth-lgthFin);
+
+     	//alert("res="+res+"  test="+test);	
+      //on test et on modifie en consequence
+     	if(test.localeCompare("paniers/gestion")==0)
+     	  res += "produits/"+id_panier+"/"+ref+"/"+qtt;
+      else{
+        res = str.substring(0, lgth-(lgth-str.indexOf("/magasinier")));
+        res += "/magasinier/paniers/gestion/produits/"+id_panier+"/"+ref+"/"+qtt;
+
+        
+      }
+
+      //redirection sur l'url finale
+      document.location.href = res;
+      //alert("res="+res);
     }
-
-    //redirection sur l'url finale
-    document.location.href = res;
-    //alert("res="+res);
-  }
-  
   </script>
-{% endblock %}
-
-{% block footer %}
 {% endblock %}

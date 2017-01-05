@@ -85,9 +85,9 @@ class PersonneController extends Controller
 
                         /*Si un client se connecte*/
                         if( strcmp($session->get('type_personne'),"Client") == 0 )
-                          return $this->redirectToRoute('liste_paniers_client');
+                          return $this->redirectToRoute('listePaniersClient');
                         else
-                          return $this->redirectToRoute('listMagasinierProduit');
+                          return $this->redirectToRoute('listeMagasinierProduit');
                      }
               }
           }
@@ -156,7 +156,7 @@ class PersonneController extends Controller
     private function createDeleteForm(Personne $personne)
     {
         return $this->createFormBuilder()
-            ->setAction($this->generateUrl('personne_delete', array('id' => $personne->getIdPersonne())))
+            ->setAction($this->generateUrl('affichePersonne', array('id' => $personne->getIdPersonne())))
             ->setMethod('DELETE')
             ->getForm()
         ;
