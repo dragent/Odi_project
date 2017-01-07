@@ -37,8 +37,6 @@ class CreationPanierController extends Controller
 		$session = $request->getSession();
 		$em = $this->getDoctrine()->getManager();
 		
-		$em = $this->getDoctrine()->getManager();
-		
 		//on cherche tout les panier de l'utilisateur et on regarde si un est en cours
 		$paniers = $em->getRepository(Panier::class)->findBy(array('id_personne' => $session->get('id_personne')));
 		foreach ($paniers as $value){

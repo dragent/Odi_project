@@ -2,72 +2,71 @@ app:
     resource: "@AppBundle/Controller/"
     type:     annotation
 
-listProduit:
-    path: /produits/list.{_format}
+listeProduit:
+    path: /produits/liste.{_format}
     defaults: {_controller: AppBundle:Produit:listProduit, _format: "html"}
-    
-        
-panier_client:
-    path: /client/panier
+
+panierClient:
+    path: /client/paniers
     defaults: {_controller: AppBundle:CreationPanier:index}
-        
-creation_panier_client:
-    path: /client/creation_panier
+
+creationPanierClient:
+    path: /client/paniers/creation
     defaults: {_controller: AppBundle:CreationPanier:newPanier}
-        
-ajout_dans_panier_client:
-    path: /client/ajout_panier/{id_panier}/{ref}/{qtt}
+
+ajoutPanierClient:
+    path: /client/paniers/ajout/{id_panier}/{ref}/{qtt}
     defaults: {_controller: AppBundle:CreationPanier:addToPanier}
-        
-liste_paniers_client: 
-    path: /client/liste_paniers
+
+listePaniersClient: 
+    path: /client/paniers/liste
     defaults: {_controller: AppBundle:ListePaniers:listPaniers}
-        
-contenu_panier_client:
-    path: /client/panier/{id_panier}
+
+contenuPanierClient:
+    path: /client/paniers/{id_panier}
     defaults: {_controller: AppBundle:ListePaniers:viewPanier}
-        
-delete_panier_client:
-    path: /client/delete_panier/{id_panier}
+
+suppressionPanierClient:
+    path: /client/paniers/supprimer/{id_panier}
     defaults: {_controller: AppBundle:CreationPanier:delPanier}
-        
-validate_panier_client:
-    path: /client/validate_panier/{id_panier}
+
+validationPanierClient:
+    path: /client/paniers/valider/{id_panier}
     defaults: {_controller: AppBundle:CreationPanier:validatePanier}
-        
-liste_paniers_magasinier: 
-    path: /magasinier/liste_paniers
+
+listePaniersMagasinier: 
+    path: /magasinier/paniers/liste
     defaults: {_controller: AppBundle:GestionPaniersMagasinier:listPaniers}
-        
-gestion_panier_magasinier:
-    path: /magasinier/gestion_panier/{id_panier}
+
+gestionPanierMagasinier:
+    path: /magasinier/paniers/gestion/{id_panier}
     defaults: {_controller: AppBundle:GestionPaniersMagasinier:gestionPanier}
-    
-gestion_panier_produit_magasinier:
-    path: /magasinier/produit_gestion_panier/{id_panier}/{ref}/{qtt}
+
+gestionPanierProduitMagasinier:
+    path: /magasinier/paniers/gestion/produits/{id_panier}/{ref}/{qtt}
     defaults: {_controller: AppBundle:GestionPaniersMagasinier:gestionPanierProduit}
-        
-gestion_panier_valider_magasinier:
-    path: /magasinier/valider_gestion_panier/{id_panier}
+
+gestionPanierValidationMagasinier:
+    path: /magasinier/paniers/gestion/validation/{id_panier}
     defaults: {_controller: AppBundle:GestionPaniersMagasinier:gestionPanierValider}
 
-listMagasinierProduit:
-    path: /magasinier/produits/list
+listeMagasinierProduit:
+    path: /magasinier/produits/liste
     defaults: {_controller: AppBundle:Produit:listMagasinierProduit}
 
-listStockProduit:
-    path: /magasinier/produits/list/stock.{_format}
+listeStocksProduit:
+    path: /magasinier/produits/liste/stocks.{_format}
     defaults: {_controller: AppBundle:Produit:listStocksProduit, _format: "html"}
 
-listAlerte:
-    path: /magasinier/alertes/list
+listeAlerte:
+    path: /magasinier/alertes/liste
 
 updateProduit:
     path: /magasinier/produits/update/{numero}
     defaults: {_controller: AppBundle:Produit:updateProduit}
 
 updateStock:
-    path: /magasinier/produits/update/stock/{numero}
+    path: /magasinier/produits/update/stocks/{numero}
     defaults: {_controller: AppBundle:Produit:updateStockProduit}
 
 ajoutProduit:
@@ -75,15 +74,15 @@ ajoutProduit:
     defaults: {_controller: AppBundle:Produit:addProduit}
 
 affichePersonne:
-    path: /personne/list
+    path: /personne/liste
     defaults: {_controller: AppBundle:Personne:index}
 
 montrePersonne:
-    path: /personne/show
+    path: /personne/profil
     defaults: {_controller: AppBundle:Personne:show}
 
-personne_new:
-    path: /personne/new
+creationPersonne:
+    path: /personne/creation
     defaults: {_controller: AppBundle:Personne:new}
 
 identification:

@@ -27,7 +27,7 @@ class ProduitController extends Controller{
         $em = $this->getDoctrine()->getManager();
         $produits = $em->getRepository(Produit::class)->findList();
 
-        return $this->render('produits/list.'.$_format.'.twig', ['produits' => $produits, 'msg' => $message]);
+        return $this->render('produits/liste.'.$_format.'.twig', ['produits' => $produits, 'msg' => $message]);
     }
 
     /**
@@ -118,7 +118,11 @@ class ProduitController extends Controller{
             $em->persist($produit);
             $em->flush();
 
-            return $this->redirectToRoute('listMagasinierProduit');
+            if ($titreOnglet == "Modif. Stocks") {
+                return $this->redirectToRoute('listeStocksProduit');
+            } else {
+                return $this->redirectToRoute('listeMagasinierProduit');
+            }
          }
         // formulaire non valide ou 1er acces : afficher le formulaire
         return $this->render('magasinier/form.twig',
