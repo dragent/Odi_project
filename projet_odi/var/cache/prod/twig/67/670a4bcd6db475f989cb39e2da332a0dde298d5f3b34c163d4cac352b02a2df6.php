@@ -49,8 +49,13 @@ class __TwigTemplate_32e7b32d9a59cef7da39efc2ba304ad0626a4d6d64ad2f1bea40892ad0d
         // line 18
         echo $this->env->getExtension('Symfony\Bridge\Twig\Extension\RoutingExtension')->getPath("listAlerte");
         echo "\">Alertes</a></li>
+      </ul>
+      <ul class=\"nav navbar-nav navbar-right\">
+        <li><a href=\"#\">Déconnexion</a></li>
+      </ul>
     </div>
-  </div>";
+  </div>
+";
     }
 
     public function getTemplateName()

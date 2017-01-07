@@ -26,7 +26,7 @@
         {% for produit in produits %}
             {% if produit.getVisibleProduit() == 1 %}
             <tr>
-                    <td> <img src="img/{{ produit.getPhotoProduit }}" alt="abc" /></td>
+                    <td> <img src="/img/{{ produit.getPhotoProduit }}" alt="{{ produit.getPhotoProduit }}" /></td>
                 <td>{{ produit.getRefProduit }}</td>
                 <td>{{ produit.getNomProduit }}</td>
                 <td>{{ produit.getDescriptionProduit }}</td>

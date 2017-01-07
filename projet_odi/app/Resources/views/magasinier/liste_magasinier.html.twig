@@ -42,7 +42,7 @@
             {% for produit in produits %}
               <tr>
                 <td>{{produit.getRefProduit}}</td>
-                <td>{{produit.getNomProduit}}<br /><a href="{{ produit.getPhotoProduit }}">Voir photo</a></td>
+                <td>{{produit.getNomProduit}}<br /><a href="/img/{{ produit.getPhotoProduit }}">Voir photo</a></td>
                 <td>{{produit.getDescriptionProduit}}</td>
                 <td>{{produit.getCategorieProduit}}</td>
                 <td>{{produit.getQuantiteProduit}}</td>
@@ -61,13 +61,9 @@
               </tr>
             {% endfor %}
           </tbody>
-        </table> 
+        </table>
     {% else %}
        <p class="centrer">Aucun produit dans la base.</p>
     {% endif %}
   </div>
 {% endblock %}
-
-
-
-

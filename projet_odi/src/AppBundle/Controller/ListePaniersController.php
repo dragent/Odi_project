@@ -9,8 +9,16 @@ use AppBundle\Entity\Panier;
 use AppBundle\Entity\Contenir;
 use AppBundle\Entity\Produit;
 
+/**
+*	Contrôleur en charge de lister les paniers.
+*/
 class ListePaniersController extends Controller
 {
+	/**
+	*	Action qui liste les paniers
+	*
+	*	@return La page html.twig de la liste des paniers créés par le client.
+	*/
 	public function listPaniersAction(Request $request)
 	{
 		$session = $request->getSession();
@@ -23,6 +31,13 @@ class ListePaniersController extends Controller
 		return $this->render('client/liste_paniers_client.twig',['Panier' => $paniers]);
 	}
 	
+	/**
+	*	Action qui liste les produits se trouvant dans le panier sélectionné.
+	*
+	*	@param $id_panier : Le panier sélectionné.
+	*
+	*	@return La page html.twig du contenu du panier client.
+	*/
 	public function viewPanierAction(Request $request,$id_panier)
 	{
 		$em = $this->getDoctrine()->getManager();

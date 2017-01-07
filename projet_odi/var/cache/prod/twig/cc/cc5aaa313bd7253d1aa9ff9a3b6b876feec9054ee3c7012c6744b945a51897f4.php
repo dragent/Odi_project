@@ -72,10 +72,10 @@ class __TwigTemplate_c0b65ddce7fa21be2dd9c298eb1867aaa3413ff77db4e471170aee2e970
                 if (($this->getAttribute($context["produit"], "getVisibleProduit", array(), "method") == 1)) {
                     // line 28
                     echo "            <tr>
-                <td> <img src=\"img/";
+                    <td> <img src=\"img/";
                     // line 29
                     echo twig_escape_filter($this->env, $this->getAttribute($context["produit"], "getPhotoProduit", array()), "html", null, true);
-                    echo "\" alt=\"stylo\" /></td>
+                    echo "\" alt=\"abc\" /></td>
                 <td>";
                     // line 30
                     echo twig_escape_filter($this->env, $this->getAttribute($context["produit"], "getRefProduit", array()), "html", null, true);
