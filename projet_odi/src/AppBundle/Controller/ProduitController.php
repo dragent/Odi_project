@@ -46,6 +46,21 @@ class ProduitController extends Controller{
     }
 
     /**
+    *   Action qui liste les produits pour le client.
+    *
+    *   @param $message : Un message (inutile).
+    *
+    *   @return La page html.twig de la liste des produits pour le client.
+    */
+    public function listClientProduitAction($message) {
+
+        $em = $this->getDoctrine()->getManager();
+        $produits = $em->getRepository(Produit::class)->findList();
+
+        return $this->render('client/liste_client.html.twig', ['produits' => $produits, 'msg' => $message]);
+    }
+
+    /**
     *   Action qui liste les stocks des produits.
     *
     *   @param $_format : Format de la liste (HTML par défaut).
@@ -81,7 +96,7 @@ class ProduitController extends Controller{
     *   @param $numero : La référence du produit à mettre à jour.
     *
     *   @return La page html.twig du formulaire des produits.
-    */    
+    */
     public function updateProduitAction(Request $request, $numero) {
 
         $em = $this->getDoctrine()->getManager();
