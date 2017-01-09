@@ -1,7 +1,7 @@
 {% extends 'base.html.twig' %}
 
 {% block menu %}
-    {% include 'magasinier/menu_magasinier.twig' %}
+    {% include 'menubase.twig' %}
 {% endblock %}
 
 {% block header %}
@@ -32,7 +32,7 @@
             </tr>
           {% endfor %}
           </tbody>
-        </table> 
+        </table>
     {% else %}
        <p class="centrer">Aucun panier dans la base.</p>
     {% endif %}

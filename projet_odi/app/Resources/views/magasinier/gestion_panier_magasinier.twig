@@ -1,7 +1,7 @@
 {% extends 'base.html.twig' %}
 
 {% block menu %}
-    {% include 'magasinier/menu_magasinier.twig' %}
+    {% include 'menubase.twig' %}
 {% endblock %}
 
 {% block header %}
@@ -27,7 +27,7 @@
         {% set cpt=0 %}
 
         {% for contenir in Contenir %}
-          {% set cpt = cpt+1 %} 
+          {% set cpt = cpt+1 %}
 	        <tr>
             <td>{{ contenir.getRefProduit() }}</td>
 
@@ -67,7 +67,7 @@
         {% set validate = 0 %}
       {% endif %}
     {% endfor %}
-    
+
     {% if validate == 1 %}
       <a type="button" class="btn btn-success btn-sm" href="{{ path('gestionPanierValidationMagasinier', { id_panier : Panier.getIdPanier() }) }}" >Valider panier</a>
     {% else %}
@@ -75,7 +75,7 @@
     {% endif %}
 
   </div>
-   
+
   <script>
   /*var str = location.href;
       var lgth = str.length;
@@ -86,7 +86,7 @@
     function confirme(cpt,id_panier,ref){
   	var qtt = $("#qtt"+cpt).val();
       //alert("cpt="+cpt+" ref="+ref+" idpanier="+id_panier+" qtt="+qtt);
-      
+
       //on recupere l'url
      	var str = location.href;
      	var lgth = str.length;
@@ -98,7 +98,7 @@
      	var test = str.substring(lgth-lgthFin, lgth);
      	var res = str.substring(0, lgth-lgthFin);
 
-     	//alert("res="+res+"  test="+test);	
+     	//alert("res="+res+"  test="+test);
       //on test et on modifie en consequence
      	if(test.localeCompare("paniers/gestion")==0)
      	  res += "produits/"+id_panier+"/"+ref+"/"+qtt;
@@ -106,7 +106,7 @@
         res = str.substring(0, lgth-(lgth-str.indexOf("/magasinier")));
         res += "/magasinier/paniers/gestion/produits/"+id_panier+"/"+ref+"/"+qtt;
 
-        
+
       }
 
       //redirection sur l'url finale

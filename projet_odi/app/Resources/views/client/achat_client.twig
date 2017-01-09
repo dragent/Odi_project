@@ -1,7 +1,7 @@
 {% extends 'base.html.twig' %}
 
 {% block menu %}
-    {% include 'client/menu_client.twig' %}
+    {% include 'menubase.twig' %}
 {% endblock %}
 
 {% block header %}
@@ -48,12 +48,12 @@
           </tbody>
         </table>
 
-        <a type="button" class="btn btn-warning " href="{{ path('validationPanierClient', { id_panier : Panier.getIdPanier() }) }}">Valider panier</a> 
+        <a type="button" class="btn btn-warning " href="{{ path('validationPanierClient', { id_panier : Panier.getIdPanier() }) }}">Valider panier</a>
         <a type="button" class="btn btn-danger" href="{{ path('suppressionPanierClient', { id_panier : Panier.getIdPanier() }) }}">Supprimer panier</a>
       </div>
-    
-    
-    
+
+
+
       <div class="col-sm-8">
         <h4>Contenu du catalogue :</h4>
 	      <table class="table table-striped " style="background-color:lightgrey;">
@@ -78,7 +78,7 @@
                     <td>{{ produit.getRefProduit() }}</td>
                     <td>{{ produit.getNomProduit() }}</td>
                     <td>{{ produit.getDescriptionProduit() }}</td>
-                    <td>{{ produit.getCategorieProduit() }}</td> 
+                    <td>{{ produit.getCategorieProduit() }}</td>
                     <td>{{ produit.getPrixProduit() }}</td>
                     <td>
                       <input type="number" id="qtt{{ cpt }}" value="1"></input>
@@ -94,14 +94,14 @@
       </div>
     </div><!-- fin row -->
   </div><!-- fin container -->
-  
-  
+
+
   <script>
 
     function confirme(cpt,ref,id_panier){
   	var qtt = $("#qtt"+cpt).val();
       //alert("cpt="+cpt+" ref="+ref+" idpanier="+id_panier+" qtt="+qtt);
-      
+
       //on recupere l'url
      	var str = location.href;
      	var lgth = str.length;
@@ -120,15 +120,7 @@
 
       //redirection sur l'url finale
       document.location.href = res;
-     
+
     }
   </script>
 {% endblock %}
-
-
-
-
-
-
-
-

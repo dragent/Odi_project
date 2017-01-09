@@ -5,7 +5,7 @@
 {% endblock %}
 
 {% block menu %}
-    {% include 'magasinier/menu_magasinier.twig' %}
+    {% include 'menubase.twig' %}
 {% endblock %}
 
 {% block header %}
@@ -49,13 +49,9 @@
               </tr>
             {% endfor %}
           </tbody>
-        </table> 
+        </table>
     {% else %}
         <p class="centrer">Aucun produit dans la base.</p>
     {% endif %}
   </div>
 {% endblock %}
-
-
-
-

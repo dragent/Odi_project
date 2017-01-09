@@ -3,8 +3,8 @@ app:
     type:     annotation
 
 listeProduit:
-    path: /produits/liste.{_format}
-    defaults: {_controller: AppBundle:Produit:listProduit, _format: "html"}
+    path: /produits/liste/{_param}
+    defaults: {_controller: AppBundle:Produit:listProduit, _param: "tout"}
 
 panierClient:
     path: /client/paniers
@@ -18,7 +18,7 @@ ajoutPanierClient:
     path: /client/paniers/ajout/{id_panier}/{ref}/{qtt}
     defaults: {_controller: AppBundle:CreationPanier:addToPanier}
 
-listePaniersClient: 
+listePaniersClient:
     path: /client/paniers/liste
     defaults: {_controller: AppBundle:ListePaniers:listPaniers}
 
@@ -34,7 +34,7 @@ validationPanierClient:
     path: /client/paniers/valider/{id_panier}
     defaults: {_controller: AppBundle:CreationPanier:validatePanier}
 
-listePaniersMagasinier: 
+listePaniersMagasinier:
     path: /magasinier/paniers/liste
     defaults: {_controller: AppBundle:GestionPaniersMagasinier:listPaniers}
 
@@ -85,6 +85,9 @@ creationPersonne:
     path: /personne/creation
     defaults: {_controller: AppBundle:Personne:new}
 
-identification:
-    path: /identification
-    defaults: {_controller: AppBundle:Personne:identification}
+login:
+    path: /login
+    defaults: {_controller: AppBundle:Security:login}
+
+logout:
+    path: /logout
