@@ -100,11 +100,11 @@
     function confirme(cpt,ref,id_panier,max){
   	var qtt = $("#qtt"+cpt).val();
       //alert("cpt="+cpt+" ref="+ref+" idpanier="+id_panier+" qtt="+qtt);
-      alert(max);
+      alert(max + " et voulu "+qtt);
       //on recupere l'url
      	var str = location.href;
      	var lgth = str.length;
-      if(qtt<=max)
+      if(qtt>0)
       {
        	//on recupere la partie de l'url devant(ou pas) contenir "paniers/creation"
        	var test = str.substring(lgth-16, lgth);
