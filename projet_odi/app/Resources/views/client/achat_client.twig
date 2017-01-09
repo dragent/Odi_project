@@ -81,10 +81,10 @@
                     <td>{{ produit.getCategorieProduit() }}</td>
                     <td>{{ produit.getPrixProduit() }}</td>
                     <td>
-                      <input type="number" id="qtt{{ cpt }}" value="1"></input>
+                      <input type="number" id="qtt{{ cpt }}"  min="0" max="{{produit.getQuantiteProduit}}"></input>
                     </td>
                     <td>
-                      <a type="button" id="btnAdd{{ cpt }}" class="btn btn-primary btn-sm" onclick="confirme('{{ cpt }}','{{ produit.getRefProduit() }}','{{ Panier.getIdPanier() }}')">{% set qtt %}3{% endset %}Ajouter</a>
+                      <a type="button" id="btnAdd{{ cpt }}" class="btn btn-primary btn-sm" onclick="confirme('{{ cpt }}','{{ produit.getRefProduit() }}','{{ Panier.getIdPanier() }}', '{{produit.getQuantiteProduit}}' )">{% set qtt %}3{% endset %}Ajouter</a>
                     </td>
                 </tr>
             {% endif %}
@@ -98,29 +98,28 @@
 
   <script>
 
-    function confirme(cpt,ref,id_panier){
+
+  <script>
+    function confirme(cpt,ref,id_panier,max){
   	var qtt = $("#qtt"+cpt).val();
-      //alert("cpt="+cpt+" ref="+ref+" idpanier="+id_panier+" qtt="+qtt);
 
       //on recupere l'url
      	var str = location.href;
      	var lgth = str.length;
-
-     	//on recupere la partie de l'url devant(ou pas) contenir "paniers/creation"
-     	var test = str.substring(lgth-16, lgth);
-     	var res = str.substring(0, lgth-16);
-
-      //on test et on modifie en consequence
-     	if(test.localeCompare("paniers/creation")==0)
-     	  res += "paniers/ajout/"+id_panier+"/"+ref+"/"+qtt;
-      else{
-        res = str.substring(0, lgth-(lgth-str.indexOf("/client")));
-        res += "/client/paniers/ajout/"+id_panier+"/"+ref+"/"+qtt;
+      if(qtt>0)
+      {
+       	//on recupere la partie de l'url devant(ou pas) contenir "paniers/creation"
+       	var test = str.substring(lgth-16, lgth);
+       	var res = str.substring(0, lgth-16);
+        //on test et on modifie en consequence
+       	if(test.localeCompare("paniers/creation")==0)
+       	  res += "paniers/ajout/"+id_panier+"/"+ref+"/"+qtt;
+        else{
+          res = str.substring(0, lgth-(lgth-str.indexOf("/client")));
+          res += "/client/paniers/ajout/"+id_panier+"/"+ref+"/"+qtt;
+        }
+        //redirection sur l'url finale
+        document.location.href = res;
       }
-
-      //redirection sur l'url finale
-      document.location.href = res;
-
-    }
   </script>
 {% endblock %}

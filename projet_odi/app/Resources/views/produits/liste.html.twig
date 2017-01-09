@@ -1,7 +1,11 @@
 {% extends 'base.html.twig' %}
 
 {% block menu %}
-    {% include 'menubase.twig' %}
+	{% if app.session.get('type_personne') == 'Client' %}
+		{% include '/client/menu_client.twig' %}
+    {% else %}
+        {% include 'menubase.twig' %}
+    {% endif %}
 {% endblock %}
 
 {% block header %}

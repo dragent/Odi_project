@@ -37,33 +37,8 @@ class CreationPanierController extends Controller
 		$session = $request->getSession();
 		$em = $this->getDoctrine()->getManager();
 		
-		//on cherche tout les panier de l'utilisateur et on regarde si un est en cours
-		$paniers = $em->getRepository(Panier::class)->findBy(array('id_personne' => $session->get('id_personne')));
-		foreach ($paniers as $value){
-			if($value->getEtatPanier() == 1){
-				$panierEnCours = true;
-				$panier = $value;
-				break;
-			}
-		}
-		
-		//si pas de panier en cours, on le cree
-		if($panierEnCours == false){
-
-			//$personne contient le client actuel (donc ligne a changer)
-			$personne = $em->getRepository(Personne::class)->findOneBy(array('id_personne' => $session->get('id_personne')));
-			
-			//on cree un nouveau panier et on remplit ses attributs
-			$panier = new Panier();
-			$panier->setEtatPanier(1);
-			$panier->setIdPersonne($personne);
-			$date = new \DateTime('now');
-			$panier->setDatePanier($date);
-			
-			// enregistrer les donnees dans la base
-			$em->persist($panier);
-			$em->flush();
-		}
+		//on cherche tout le dernier panier du client ou on en crée un autre (methode dans le repository)
+		$panier = $em->getRepository(Panier::class)->panierEnCours($request);
 		
 		//liste des produits
 		$produit = $em->getRepository(Produit::class)->findAll();

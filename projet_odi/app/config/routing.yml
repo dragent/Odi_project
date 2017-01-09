@@ -6,6 +6,10 @@ listeProduit:
     path: /produits/liste/{_param}
     defaults: {_controller: AppBundle:Produit:listProduit, _param: "tout"}
 
+listeClientProduit:
+    path: /client/produits/liste.{_format}
+    defaults: {_controller: AppBundle:Produit:listClientProduit, _format: "html"}
+
 panierClient:
     path: /client/paniers
     defaults: {_controller: AppBundle:CreationPanier:index}

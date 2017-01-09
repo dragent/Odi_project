@@ -44,8 +44,11 @@ class GestionPaniersMagasinierController extends Controller
 		$contenir = $em->getRepository(Contenir::class)->findBy(array('id_panier' => $id_panier));
 		$panier = $em->getRepository(Panier::class)->findOneBy(array('id_panier' => $id_panier));
 		$produit = $em->getRepository(Produit::class)->findAll();
-	
-		return $this->render('magasinier/gestion_panier_magasinier.twig',['Contenir' => $contenir, 'Panier' => $panier, 'Produit' => $produit]);
+		
+		$alertStock = false;
+		$alertTropProduits = false;
+		$alertNeg = false;
+		return $this->render('magasinier/gestion_panier_magasinier.twig',['Contenir' => $contenir, 'Panier' => $panier, 'Produit' => $produit, 'alertStock' => $alertStock, 'alertTropProduits' => $alertTropProduits, 'alertNeg' => $alertNeg]);
 	}
 	
 	/**
@@ -60,27 +63,45 @@ class GestionPaniersMagasinierController extends Controller
 	public function gestionPanierProduitAction(Request $request, $ref, $id_panier, $qtt){
 		$em = $this->getDoctrine()->getManager();
 		
+		//alertes non affichées de base
+		$alertStock = false;
+		$alertTropProduits = false;
+		$alertNeg = false;
+		
 		//on recupere le produit et l'objet contenir
+		$qttStock = $em->getRepository(produit::class)->findOneBy(array('ref_produit' => $ref))->getQuantiteProduit();
 		$contenir = $em->getRepository(Contenir::class)->findOneBy(array('id_panier' => $id_panier, 'ref_produit' => $ref));
 		$produit = $em->getRepository(produit::class)->findOneBy(array('ref_produit' => $ref));
 		
-		//on modifie les qtt 
-		$qttContenir= $contenir->getQuantiteProduitGeree() + $qtt;
-		$contenir->setQuantiteProduitGeree($qttContenir);
-		
-		$qttProduit = $produit->getQuantiteProduit() - $qtt;
-		$produit->setQuantiteProduit($qttProduit);
-
-		$em->persist($contenir);
-		$em->persist($produit);
-		$em->flush();
+		//on vérifie les alertes
+		if($qtt < 0){
+			$alertNeg = true;
+		}
+		else if($qttStock < $qtt){
+			$alertStock = true;
+		}
+		else if(($contenir->getQuantiteProduit()-$contenir->getQuantiteProduitGeree()) < $qtt){
+			$alertTropProduits = true;
+		}
+		else{
+			//on modifie les qtt 
+			$qttContenir= $contenir->getQuantiteProduitGeree() + $qtt;
+			$contenir->setQuantiteProduitGeree($qttContenir);
+			
+			$qttProduit = $produit->getQuantiteProduit() - $qtt;
+			$produit->setQuantiteProduit($qttProduit);
+	
+			$em->persist($contenir);
+			$em->persist($produit);
+			$em->flush();
+		}
 		
 		//on recharge les variables pour les envoyer a la vue
 		$contenir = $em->getRepository(Contenir::class)->findBy(array('id_panier' => $id_panier));
 		$panier = $em->getRepository(Panier::class)->findOneBy(array('id_panier' => $id_panier));
 		$produit = $em->getRepository(Produit::class)->findAll();
 		
-		return $this->render('magasinier/gestion_panier_magasinier.twig',['Contenir' => $contenir, 'Panier' => $panier, 'Produit' => $produit]);
+		return $this->render('magasinier/gestion_panier_magasinier.twig',['Contenir' => $contenir, 'Panier' => $panier, 'Produit' => $produit, 'alertStock' => $alertStock, 'alertTropProduits' => $alertTropProduits, 'alertNeg' => $alertNeg]);
 	}
 	
 	/**

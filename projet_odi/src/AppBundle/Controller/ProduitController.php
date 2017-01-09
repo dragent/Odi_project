@@ -112,7 +112,7 @@ class ProduitController extends Controller{
 
             if ($form->isSubmitted() && $form->isValid()) {
             // enregistrer les donnees dans la base
-            $produit = $form->getData();
+            $produit = $form->getData() ;
             $em = $this->getDoctrine()->getManager();
             $em->persist($produit);
             $em->flush();
