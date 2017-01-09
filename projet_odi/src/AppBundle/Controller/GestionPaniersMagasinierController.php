@@ -47,7 +47,8 @@ class GestionPaniersMagasinierController extends Controller
 		
 		$alertStock = false;
 		$alertTropProduits = false;
-		return $this->render('magasinier/gestion_panier_magasinier.twig',['Contenir' => $contenir, 'Panier' => $panier, 'Produit' => $produit, 'alertStock' => $alertStock, 'alertTropProduits' => $alertTropProduits]);
+		$alertNeg = false;
+		return $this->render('magasinier/gestion_panier_magasinier.twig',['Contenir' => $contenir, 'Panier' => $panier, 'Produit' => $produit, 'alertStock' => $alertStock, 'alertTropProduits' => $alertTropProduits, 'alertNeg' => $alertNeg]);
 	}
 	
 	/**
@@ -65,6 +66,7 @@ class GestionPaniersMagasinierController extends Controller
 		//alertes non affichées de base
 		$alertStock = false;
 		$alertTropProduits = false;
+		$alertNeg = false;
 		
 		//on recupere le produit et l'objet contenir
 		$qttStock = $em->getRepository(produit::class)->findOneBy(array('ref_produit' => $ref))->getQuantiteProduit();
@@ -72,10 +74,13 @@ class GestionPaniersMagasinierController extends Controller
 		$produit = $em->getRepository(produit::class)->findOneBy(array('ref_produit' => $ref));
 		
 		//on vérifie les alertes
-		if($qttStock < $qtt){
+		if($qtt < 0){
+			$alertNeg = true;
+		}
+		else if($qttStock < $qtt){
 			$alertStock = true;
 		}
-		else if($contenir->getQuantiteProduitGeree() < $qtt){
+		else if(($contenir->getQuantiteProduit()-$contenir->getQuantiteProduitGeree()) < $qtt){
 			$alertTropProduits = true;
 		}
 		else{
@@ -96,7 +101,7 @@ class GestionPaniersMagasinierController extends Controller
 		$panier = $em->getRepository(Panier::class)->findOneBy(array('id_panier' => $id_panier));
 		$produit = $em->getRepository(Produit::class)->findAll();
 		
-		return $this->render('magasinier/gestion_panier_magasinier.twig',['Contenir' => $contenir, 'Panier' => $panier, 'Produit' => $produit, 'alertStock' => $alertStock, 'alertTropProduits' => $alertTropProduits]);
+		return $this->render('magasinier/gestion_panier_magasinier.twig',['Contenir' => $contenir, 'Panier' => $panier, 'Produit' => $produit, 'alertStock' => $alertStock, 'alertTropProduits' => $alertTropProduits, 'alertNeg' => $alertNeg]);
 	}
 	
 	/**
