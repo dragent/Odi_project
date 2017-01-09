@@ -6,6 +6,10 @@ listeProduit:
     path: /produits/liste.{_format}
     defaults: {_controller: AppBundle:Produit:listProduit, _format: "html"}
 
+listeClientProduit:
+    path: /client/produits/liste.{_format}
+    defaults: {_controller: AppBundle:Produit:listClientProduit, _format: "html"}
+
 panierClient:
     path: /client/paniers
     defaults: {_controller: AppBundle:CreationPanier:index}
@@ -18,7 +22,7 @@ ajoutPanierClient:
     path: /client/paniers/ajout/{id_panier}/{ref}/{qtt}
     defaults: {_controller: AppBundle:CreationPanier:addToPanier}
 
-listePaniersClient: 
+listePaniersClient:
     path: /client/paniers/liste
     defaults: {_controller: AppBundle:ListePaniers:listPaniers}
 
@@ -34,7 +38,7 @@ validationPanierClient:
     path: /client/paniers/valider/{id_panier}
     defaults: {_controller: AppBundle:CreationPanier:validatePanier}
 
-listePaniersMagasinier: 
+listePaniersMagasinier:
     path: /magasinier/paniers/liste
     defaults: {_controller: AppBundle:GestionPaniersMagasinier:listPaniers}
 

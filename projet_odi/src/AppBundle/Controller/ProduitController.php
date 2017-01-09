@@ -30,6 +30,15 @@ class ProduitController extends Controller{
         return $this->render('produits/liste.'.$_format.'.twig', ['produits' => $produits, 'msg' => $message]);
     }
 
+    public function listClientProduitAction($message, $_format) {
+
+        $em = $this->getDoctrine()->getManager();
+        $produits = $em->getRepository(Produit::class)->findList();
+
+        return $this->render('client/liste_client.'.$_format.'.twig', ['produits' => $produits, 'msg' => $message]);
+    }
+
+
     /**
     *   Action qui liste les produits pour le magasinier.
     *
@@ -81,7 +90,7 @@ class ProduitController extends Controller{
     *   @param $numero : La référence du produit à mettre à jour.
     *
     *   @return La page html.twig du formulaire des produits.
-    */    
+    */
     public function updateProduitAction(Request $request, $numero) {
 
         $em = $this->getDoctrine()->getManager();

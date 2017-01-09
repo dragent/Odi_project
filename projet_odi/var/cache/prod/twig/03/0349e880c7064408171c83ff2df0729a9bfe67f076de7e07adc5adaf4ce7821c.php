@@ -29,7 +29,10 @@ class __TwigTemplate_e795e8d4669c9d99688865bc7fa9f56538bde3ec0eb8aa981d14a73369d
 
   <div class=\"collapse navbar-collapse\" id=\"bs-example-navbar-collapse-1\">
     <ul class=\"nav navbar-nav\">
-      <li><a href=\"/produits/list\">Produits</a></li>
+      <li><a href=\"";
+        // line 14
+        echo $this->env->getExtension('Symfony\Bridge\Twig\Extension\RoutingExtension')->getPath("listeProduit");
+        echo "\">Produits</a></li>
     </ul>
     <ul class=\"nav navbar-nav navbar-right\">
         <li><a href=\"/identification\">Identification</a></li>
@@ -44,9 +47,14 @@ class __TwigTemplate_e795e8d4669c9d99688865bc7fa9f56538bde3ec0eb8aa981d14a73369d
         return "menubase.twig";
     }
 
+    public function isTraitable()
+    {
+        return false;
+    }
+
     public function getDebugInfo()
     {
-        return array (  19 => 1,);
+        return array (  34 => 14,  19 => 1,);
     }
 
     /** @deprecated since 1.27 (to be removed in 2.0). Use getSourceContext() instead */

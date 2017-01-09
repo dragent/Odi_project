@@ -109,86 +109,103 @@ class appDevDebugProjectContainerUrlMatcher extends Symfony\Bundle\FrameworkBund
             return array (  '_controller' => 'AppBundle\\Controller\\DefaultController::indexAction',  '_route' => 'homepage',);
         }
 
-        // listProduit
-        if (0 === strpos($pathinfo, '/produits/list') && preg_match('#^/produits/list(?:\\.(?P<_format>[^/]++))?$#s', $pathinfo, $matches)) {
-            return $this->mergeDefaults(array_replace($matches, array('_route' => 'listProduit')), array (  '_controller' => 'AppBundle\\Controller\\ProduitController::listProduitAction',  '_format' => 'html',));
+        // listeProduit
+        if (0 === strpos($pathinfo, '/produits/liste') && preg_match('#^/produits/liste(?:\\.(?P<_format>[^/]++))?$#s', $pathinfo, $matches)) {
+            return $this->mergeDefaults(array_replace($matches, array('_route' => 'listeProduit')), array (  '_controller' => 'AppBundle\\Controller\\ProduitController::listProduitAction',  '_format' => 'html',));
         }
 
-        if (0 === strpos($pathinfo, '/client')) {
-            // panier_client
-            if ($pathinfo === '/client/panier') {
-                return array (  '_controller' => 'AppBundle\\Controller\\CreationPanierController::indexAction',  '_route' => 'panier_client',);
+        if (0 === strpos($pathinfo, '/client/p')) {
+            // listeClientProduit
+            if (0 === strpos($pathinfo, '/client/produits/liste') && preg_match('#^/client/produits/liste(?:\\.(?P<_format>[^/]++))?$#s', $pathinfo, $matches)) {
+                return $this->mergeDefaults(array_replace($matches, array('_route' => 'listeClientProduit')), array (  '_controller' => 'AppBundle\\Controller\\ProduitController::listClientProduitAction',  '_format' => 'html',));
             }
 
-            // creation_panier_client
-            if ($pathinfo === '/client/creation_panier') {
-                return array (  '_controller' => 'AppBundle\\Controller\\CreationPanierController::newPanierAction',  '_route' => 'creation_panier_client',);
-            }
+            if (0 === strpos($pathinfo, '/client/paniers')) {
+                // panierClient
+                if ($pathinfo === '/client/paniers') {
+                    return array (  '_controller' => 'AppBundle\\Controller\\CreationPanierController::indexAction',  '_route' => 'panierClient',);
+                }
 
-            // ajout_dans_panier_client
-            if (0 === strpos($pathinfo, '/client/ajout_panier') && preg_match('#^/client/ajout_panier/(?P<id_panier>[^/]++)/(?P<ref>[^/]++)/(?P<qtt>[^/]++)$#s', $pathinfo, $matches)) {
-                return $this->mergeDefaults(array_replace($matches, array('_route' => 'ajout_dans_panier_client')), array (  '_controller' => 'AppBundle\\Controller\\CreationPanierController::addToPanierAction',));
-            }
+                // creationPanierClient
+                if ($pathinfo === '/client/paniers/creation') {
+                    return array (  '_controller' => 'AppBundle\\Controller\\CreationPanierController::newPanierAction',  '_route' => 'creationPanierClient',);
+                }
 
-            // liste_paniers_client
-            if ($pathinfo === '/client/liste_paniers') {
-                return array (  '_controller' => 'AppBundle\\Controller\\ListePaniersController::listPaniersAction',  '_route' => 'liste_paniers_client',);
-            }
+                // ajoutPanierClient
+                if (0 === strpos($pathinfo, '/client/paniers/ajout') && preg_match('#^/client/paniers/ajout/(?P<id_panier>[^/]++)/(?P<ref>[^/]++)/(?P<qtt>[^/]++)$#s', $pathinfo, $matches)) {
+                    return $this->mergeDefaults(array_replace($matches, array('_route' => 'ajoutPanierClient')), array (  '_controller' => 'AppBundle\\Controller\\CreationPanierController::addToPanierAction',));
+                }
 
-            // contenu_panier_client
-            if (0 === strpos($pathinfo, '/client/panier') && preg_match('#^/client/panier/(?P<id_panier>[^/]++)$#s', $pathinfo, $matches)) {
-                return $this->mergeDefaults(array_replace($matches, array('_route' => 'contenu_panier_client')), array (  '_controller' => 'AppBundle\\Controller\\ListePaniersController::viewPanierAction',));
-            }
+                // listePaniersClient
+                if ($pathinfo === '/client/paniers/liste') {
+                    return array (  '_controller' => 'AppBundle\\Controller\\ListePaniersController::listPaniersAction',  '_route' => 'listePaniersClient',);
+                }
 
-            // delete_panier_client
-            if (0 === strpos($pathinfo, '/client/delete_panier') && preg_match('#^/client/delete_panier/(?P<id_panier>[^/]++)$#s', $pathinfo, $matches)) {
-                return $this->mergeDefaults(array_replace($matches, array('_route' => 'delete_panier_client')), array (  '_controller' => 'AppBundle\\Controller\\CreationPanierController::delPanierAction',));
-            }
+                // contenuPanierClient
+                if (preg_match('#^/client/paniers/(?P<id_panier>[^/]++)$#s', $pathinfo, $matches)) {
+                    return $this->mergeDefaults(array_replace($matches, array('_route' => 'contenuPanierClient')), array (  '_controller' => 'AppBundle\\Controller\\ListePaniersController::viewPanierAction',));
+                }
 
-            // validate_panier_client
-            if (0 === strpos($pathinfo, '/client/validate_panier') && preg_match('#^/client/validate_panier/(?P<id_panier>[^/]++)$#s', $pathinfo, $matches)) {
-                return $this->mergeDefaults(array_replace($matches, array('_route' => 'validate_panier_client')), array (  '_controller' => 'AppBundle\\Controller\\CreationPanierController::validatePanierAction',));
+                // suppressionPanierClient
+                if (0 === strpos($pathinfo, '/client/paniers/supprimer') && preg_match('#^/client/paniers/supprimer/(?P<id_panier>[^/]++)$#s', $pathinfo, $matches)) {
+                    return $this->mergeDefaults(array_replace($matches, array('_route' => 'suppressionPanierClient')), array (  '_controller' => 'AppBundle\\Controller\\CreationPanierController::delPanierAction',));
+                }
+
+                // validationPanierClient
+                if (0 === strpos($pathinfo, '/client/paniers/valider') && preg_match('#^/client/paniers/valider/(?P<id_panier>[^/]++)$#s', $pathinfo, $matches)) {
+                    return $this->mergeDefaults(array_replace($matches, array('_route' => 'validationPanierClient')), array (  '_controller' => 'AppBundle\\Controller\\CreationPanierController::validatePanierAction',));
+                }
+
             }
 
         }
 
         if (0 === strpos($pathinfo, '/magasinier')) {
-            // liste_paniers_magasinier
-            if ($pathinfo === '/magasinier/liste_paniers') {
-                return array (  '_controller' => 'AppBundle\\Controller\\GestionPaniersMagasinierController::listPaniersAction',  '_route' => 'liste_paniers_magasinier',);
-            }
+            if (0 === strpos($pathinfo, '/magasinier/p')) {
+                if (0 === strpos($pathinfo, '/magasinier/paniers')) {
+                    // listePaniersMagasinier
+                    if ($pathinfo === '/magasinier/paniers/liste') {
+                        return array (  '_controller' => 'AppBundle\\Controller\\GestionPaniersMagasinierController::listPaniersAction',  '_route' => 'listePaniersMagasinier',);
+                    }
 
-            // gestion_panier_magasinier
-            if (0 === strpos($pathinfo, '/magasinier/gestion_panier') && preg_match('#^/magasinier/gestion_panier/(?P<id_panier>[^/]++)$#s', $pathinfo, $matches)) {
-                return $this->mergeDefaults(array_replace($matches, array('_route' => 'gestion_panier_magasinier')), array (  '_controller' => 'AppBundle\\Controller\\GestionPaniersMagasinierController::gestionPanierAction',));
-            }
+                    if (0 === strpos($pathinfo, '/magasinier/paniers/gestion')) {
+                        // gestionPanierMagasinier
+                        if (preg_match('#^/magasinier/paniers/gestion/(?P<id_panier>[^/]++)$#s', $pathinfo, $matches)) {
+                            return $this->mergeDefaults(array_replace($matches, array('_route' => 'gestionPanierMagasinier')), array (  '_controller' => 'AppBundle\\Controller\\GestionPaniersMagasinierController::gestionPanierAction',));
+                        }
 
-            // gestion_panier_produit_magasinier
-            if (0 === strpos($pathinfo, '/magasinier/produit_gestion_panier') && preg_match('#^/magasinier/produit_gestion_panier/(?P<id_panier>[^/]++)/(?P<ref>[^/]++)/(?P<qtt>[^/]++)$#s', $pathinfo, $matches)) {
-                return $this->mergeDefaults(array_replace($matches, array('_route' => 'gestion_panier_produit_magasinier')), array (  '_controller' => 'AppBundle\\Controller\\GestionPaniersMagasinierController::gestionPanierProduitAction',));
-            }
+                        // gestionPanierProduitMagasinier
+                        if (0 === strpos($pathinfo, '/magasinier/paniers/gestion/produits') && preg_match('#^/magasinier/paniers/gestion/produits/(?P<id_panier>[^/]++)/(?P<ref>[^/]++)/(?P<qtt>[^/]++)$#s', $pathinfo, $matches)) {
+                            return $this->mergeDefaults(array_replace($matches, array('_route' => 'gestionPanierProduitMagasinier')), array (  '_controller' => 'AppBundle\\Controller\\GestionPaniersMagasinierController::gestionPanierProduitAction',));
+                        }
 
-            // gestion_panier_valider_magasinier
-            if (0 === strpos($pathinfo, '/magasinier/valider_gestion_panier') && preg_match('#^/magasinier/valider_gestion_panier/(?P<id_panier>[^/]++)$#s', $pathinfo, $matches)) {
-                return $this->mergeDefaults(array_replace($matches, array('_route' => 'gestion_panier_valider_magasinier')), array (  '_controller' => 'AppBundle\\Controller\\GestionPaniersMagasinierController::gestionPanierValiderAction',));
-            }
+                        // gestionPanierValidationMagasinier
+                        if (0 === strpos($pathinfo, '/magasinier/paniers/gestion/validation') && preg_match('#^/magasinier/paniers/gestion/validation/(?P<id_panier>[^/]++)$#s', $pathinfo, $matches)) {
+                            return $this->mergeDefaults(array_replace($matches, array('_route' => 'gestionPanierValidationMagasinier')), array (  '_controller' => 'AppBundle\\Controller\\GestionPaniersMagasinierController::gestionPanierValiderAction',));
+                        }
 
-            if (0 === strpos($pathinfo, '/magasinier/produits/list')) {
-                // listMagasinierProduit
-                if ($pathinfo === '/magasinier/produits/list') {
-                    return array (  '_controller' => 'AppBundle\\Controller\\ProduitController::listMagasinierProduitAction',  '_route' => 'listMagasinierProduit',);
+                    }
+
                 }
 
-                // listStockProduit
-                if (0 === strpos($pathinfo, '/magasinier/produits/list/stock') && preg_match('#^/magasinier/produits/list/stock(?:\\.(?P<_format>[^/]++))?$#s', $pathinfo, $matches)) {
-                    return $this->mergeDefaults(array_replace($matches, array('_route' => 'listStockProduit')), array (  '_controller' => 'AppBundle\\Controller\\ProduitController::listStocksProduitAction',  '_format' => 'html',));
+                if (0 === strpos($pathinfo, '/magasinier/produits/liste')) {
+                    // listeMagasinierProduit
+                    if ($pathinfo === '/magasinier/produits/liste') {
+                        return array (  '_controller' => 'AppBundle\\Controller\\ProduitController::listMagasinierProduitAction',  '_route' => 'listeMagasinierProduit',);
+                    }
+
+                    // listeStocksProduit
+                    if (0 === strpos($pathinfo, '/magasinier/produits/liste/stocks') && preg_match('#^/magasinier/produits/liste/stocks(?:\\.(?P<_format>[^/]++))?$#s', $pathinfo, $matches)) {
+                        return $this->mergeDefaults(array_replace($matches, array('_route' => 'listeStocksProduit')), array (  '_controller' => 'AppBundle\\Controller\\ProduitController::listStocksProduitAction',  '_format' => 'html',));
+                    }
+
                 }
 
             }
 
-            // listAlerte
-            if ($pathinfo === '/magasinier/alertes/list') {
-                return array('_route' => 'listAlerte');
+            // listeAlerte
+            if ($pathinfo === '/magasinier/alertes/liste') {
+                return array('_route' => 'listeAlerte');
             }
 
             if (0 === strpos($pathinfo, '/magasinier/produits')) {
@@ -199,7 +216,7 @@ class appDevDebugProjectContainerUrlMatcher extends Symfony\Bundle\FrameworkBund
                     }
 
                     // updateStock
-                    if (0 === strpos($pathinfo, '/magasinier/produits/update/stock') && preg_match('#^/magasinier/produits/update/stock/(?P<numero>[^/]++)$#s', $pathinfo, $matches)) {
+                    if (0 === strpos($pathinfo, '/magasinier/produits/update/stocks') && preg_match('#^/magasinier/produits/update/stocks/(?P<numero>[^/]++)$#s', $pathinfo, $matches)) {
                         return $this->mergeDefaults(array_replace($matches, array('_route' => 'updateStock')), array (  '_controller' => 'AppBundle\\Controller\\ProduitController::updateStockProduitAction',));
                     }
 
@@ -216,18 +233,18 @@ class appDevDebugProjectContainerUrlMatcher extends Symfony\Bundle\FrameworkBund
 
         if (0 === strpos($pathinfo, '/personne')) {
             // affichePersonne
-            if ($pathinfo === '/personne/list') {
+            if ($pathinfo === '/personne/liste') {
                 return array (  '_controller' => 'AppBundle\\Controller\\PersonneController::indexAction',  '_route' => 'affichePersonne',);
             }
 
             // montrePersonne
-            if ($pathinfo === '/personne/show') {
+            if ($pathinfo === '/personne/profil') {
                 return array (  '_controller' => 'AppBundle\\Controller\\PersonneController::showAction',  '_route' => 'montrePersonne',);
             }
 
-            // personne_new
-            if ($pathinfo === '/personne/new') {
-                return array (  '_controller' => 'AppBundle\\Controller\\PersonneController::newAction',  '_route' => 'personne_new',);
+            // creationPersonne
+            if ($pathinfo === '/personne/creation') {
+                return array (  '_controller' => 'AppBundle\\Controller\\PersonneController::newAction',  '_route' => 'creationPersonne',);
             }
 
         }

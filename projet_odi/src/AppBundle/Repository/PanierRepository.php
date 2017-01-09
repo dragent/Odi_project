@@ -14,7 +14,11 @@ use AppBundle\Entity\Personne;
  */
 class PanierRepository extends \Doctrine\ORM\EntityRepository
 {
-	
+	/**
+	 *	Méthode qui créée un nouveau panier ou récupère celui non validé.
+	 *
+	 *	@return Le nouveau panier ou clui non validé
+	 */
 	public function panierEnCours(Request $request){
 		
 		$session = $request->getSession();
