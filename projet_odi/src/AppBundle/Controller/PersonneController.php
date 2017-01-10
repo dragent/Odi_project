@@ -58,45 +58,10 @@ class PersonneController extends Controller
      *  Action qui gère l'identification d'une personne.
      *
      *  @return La page html.twig du formulaire d'authentification
-     *          si le formulaire n'est pas soumis, sinon la page 
+     *          si le formulaire n'est pas soumis, sinon la page
      *          de liste des produits pour le magasinier ou la page
      *          de liste des paniers pour le client.
      */
-     public function identificationAction(Request $request)
-     {
-         $identification = new Identification();
-         $form = $this->createForm('AppBundle\Form\Type\IdentificationType', $identification, ["method" => 'POST']);
-         $form->handleRequest($request);
-         $em = $this->getDoctrine()->getManager();
-         $personnes = $em->getRepository('AppBundle:Personne')->findAll();
-         if ($form->isSubmitted() && $form->isValid()) {
-              foreach($personnes as $p)
-              {
-                  if ($p->getPseudoPersonne() == $identification->getPseudo() &&
-                     $p->getMdpPersonne() == $identification->getMdp())
-                     {
-                        /*on recupere la session*/ 
-                        $session = $request->getSession();
-
-                        /*on cree et assigne les attributs de la session*/
-                        $session->set('id_personne', $p->getIdPersonne());
-                        $session->set('pseudo_personne', $p->getPseudoPersonne());
-                        $session->set('type_personne', $p->getTypePersonne());
-
-                        /*Si un client se connecte*/
-                        if( strcmp($session->get('type_personne'),"Client") == 0 )
-                          return $this->redirectToRoute('listePaniersClient');
-                        else
-                          return $this->redirectToRoute('listeMagasinierProduit');
-                     }
-              }
-          }
-
-         return $this->render('usersidentification.html.twig', array(
-             'identification' => $identification,
-             'form' => $form->createView(),
-         ));
-     }
 
 
     /**

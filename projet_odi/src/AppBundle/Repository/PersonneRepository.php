@@ -2,6 +2,10 @@
 
 namespace AppBundle\Repository;
 
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+
+use AppBundle\Entity\Personne;
 /**
  * PersonneRepository
  *
@@ -11,9 +15,16 @@ namespace AppBundle\Repository;
 class PersonneRepository extends \Doctrine\ORM\EntityRepository
 {
 	public function findList(){
-        
+
         $orderby = array('ref_produit' => 'ASC');
-        
+
         return $this->findBy(array(), $orderby);
+    }
+
+    public function getIdSession($user){
+        $em = $this->getEntityManager();
+
+        $p = $em->getRepository(Personne::class)->findOneBy(array('pseudo_personne'=>$user));
+        return $p->getIdPersonne();
     }
 }

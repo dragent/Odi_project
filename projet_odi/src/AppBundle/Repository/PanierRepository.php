@@ -19,14 +19,14 @@ class PanierRepository extends \Doctrine\ORM\EntityRepository
 	 *
 	 *	@return Le nouveau panier ou clui non validé
 	 */
-	public function panierEnCours(Request $request){
-		
+	public function panierEnCours(Request $request, $id){
+
 		$session = $request->getSession();
 		$em = $this->getEntityManager();
 		$panierEnCours = false;
-		
+
 		//on cherche tout les panier de l'utilisateur et on regarde si un est en cours
-		$paniers = $em->getRepository(Panier::class)->findBy(array('id_personne' => $session->get('id_personne')));
+		$paniers = $em->getRepository(Panier::class)->findBy(array('id_personne' => $id));
 		foreach ($paniers as $value){
 			if($value->getEtatPanier() == 1){
 				$panierEnCours = true;
@@ -34,26 +34,26 @@ class PanierRepository extends \Doctrine\ORM\EntityRepository
 				break;
 			}
 		}
-		
+
 		//si pas de panier en cours, on le cree
 		if($panierEnCours == false){
-		
+
 			//$personne contient le client actuel (donc ligne a changer)
-			$personne = $em->getRepository(Personne::class)->findOneBy(array('id_personne' => $session->get('id_personne')));
-				
+			$personne = $em->getRepository(Personne::class)->findOneBy(array('id_personne' => $id));
+
 			//on cree un nouveau panier et on remplit ses attributs
 			$panier = new Panier();
 			$panier->setEtatPanier(1);
 			$panier->setIdPersonne($personne);
 			$date = new \DateTime('now');
 			$panier->setDatePanier($date);
-				
+
 			// enregistrer les donnees dans la base
 			$em->persist($panier);
 			$em->flush();
 		}
-		
+
 		return $panier;
 	}
-	
+
 }

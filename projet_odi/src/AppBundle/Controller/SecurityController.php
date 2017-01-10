@@ -3,10 +3,13 @@
 namespace AppBundle\Controller;
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 use Symfony\Component\HttpFoundation\Request;
+use AppBundle\Entity\Personne;
+
 class SecurityController extends Controller
 {
     public function loginAction(Request $request)
     {
+        $em = $this->getDoctrine()->getManager();
         // login demandé par un utilisateur authentifié => rediriger vers home
         if ($this->isGranted('IS_AUTHENTICATED_FULLY')) {
             return $this->redirectToRoute('home');

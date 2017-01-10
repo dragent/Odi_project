@@ -25,7 +25,7 @@ class CreationPanierController extends Controller
 	{
 		return $this->render('client/creation_panier_client.twig');
 	}
-	
+
 	/**
 	*	Action qui créée un nouveau panier ou récupère celui non validé.
 	*
@@ -34,12 +34,15 @@ class CreationPanierController extends Controller
 	public function newPanierAction(Request $request)
 	{
 		$panierEnCours = false;
-		$session = $request->getSession();
 		$em = $this->getDoctrine()->getManager();
-		
+
+        $user = $this->getUser();
+
+        $id = $em->getRepository(Personne::class)->getIdSession($user);
+
 		//on cherche tout le dernier panier du client ou on en crée un autre (methode dans le repository)
-		$panier = $em->getRepository(Panier::class)->panierEnCours($request);
-		
+		$panier = $em->getRepository(Panier::class)->panierEnCours($request,$id);
+
 		//liste des produits
 		$produit = $em->getRepository(Produit::class)->findAll();
 		//lises des produits du panier
@@ -47,22 +50,22 @@ class CreationPanierController extends Controller
 
 		return $this->render('client/achat_client.twig',['Panier' => $panier, 'Produit' => $produit, 'Contenir' => $contenir]);
 	}
-	
+
 	/**
 	*	Action qui ajoute un produit au panier.
 	*
 	*	@param $ref : La référence du produit.
 	*	@param $id_panier : L'identifiant du panier concerné.
 	*	@param $qtt : La quantité du produit sélectionné.
-	*	
+	*
 	*	@return La page html.twig de sélection des produits.
 	*/
 	public function addToPanierAction(Request $request, $ref, $id_panier, $qtt){
 		$em = $this->getDoctrine()->getManager();
-		
+
 		//on cherche si deja present dans le panier
 		$dejaContenu = $em->getRepository(Contenir::class)->findOneBy(array('id_panier' => $id_panier, 'ref_produit' => $ref));
-		
+
 		//si non on cree un nouveau contenu, sinon on modifie la qtt
 		if($dejaContenu == null){
 			//on cree un nouveau "contenu" et on remplit ses attributs
@@ -78,20 +81,20 @@ class CreationPanierController extends Controller
 			$qttFinale = $qtt + $contenir->getQuantiteProduit();
 			$contenir->setQuantiteProduit($qttFinale);
 		}
-		
-		
+
+
 		// enregistrer les donnees dans la base
 		$em->persist($contenir);
 		$em->flush();
-		
-		
+
+
 		$contenir = $em->getRepository(Contenir::class)->findBy(array('id_panier' => $id_panier));
 		$produit = $em->getRepository(Produit::class)->findAll();
 		$panier = $em->getRepository(Panier::class)->findOneBy(array('id_panier' => $id_panier));
-		
+
 		return $this->render('client/achat_client.twig',['Panier' => $panier, 'Produit' => $produit, 'Contenir' => $contenir]);
 	}
-	
+
 	/**
 	*	Action de suppression du panier.
 	*
@@ -106,7 +109,7 @@ class CreationPanierController extends Controller
 		$em->flush();
 		return $this->render('client/creation_panier_client.twig');
 	}
-	
+
 	/**
 	*	Action de validation du panier.
 	*
@@ -119,12 +122,16 @@ class CreationPanierController extends Controller
 		$panier = $em->getRepository(Panier::class)->findOneBy(array('id_panier' => $id_panier));
 		$panier->setEtatPanier(2);//1=encours 2=valide
 		$em->flush();
-		
+
+        $user = $this->getUser();
+
+        $id = $em->getRepository(Personne::class)->getIdSession($user);
+
 		//on cherche tout les paniers du client
-		$paniers = $em->getRepository(Panier::class)->findBy(array('id_personne' => '1'));
-		
+		$paniers = $em->getRepository(Panier::class)->findBy(array('id_personne' => $id));
+
 		return $this->render('client/liste_paniers_client.twig',['Panier' => $paniers]);
 	}
-	
+
 
 }

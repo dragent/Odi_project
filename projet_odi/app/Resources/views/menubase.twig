@@ -39,8 +39,10 @@
     <ul class="nav navbar-nav navbar-right">
             {% if is_granted('IS_AUTHENTICATED_FULLY') %}
                  <li>
+                     {% if app.session.has('id_personne') %}     <div class="alert alert-warning">           {{ app.session.get('id_personne') }}     </div> {% endif %}
                      <i class='fa fa-user-secret'></i>
                      {{ app.user.username }}
+                     {{ app.session.get('pseudo_personne')}}
                 </li>
                  <li><a href="{{ path('logout') }}">déconnexion</a></li>
             {% else %}
