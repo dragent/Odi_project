@@ -35,11 +35,11 @@
               {% endif %}
 
               <td>{{ paniers.getDatePanier() | date("d / m / Y")}}</td>
-
+              
               <td><a class="btn btn-primary" href="{{ path('contenuPanierClient', { id_panier : paniers.getIdPanier() }) }}">Voir</a></td>
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table> 
   </div>
 {% endblock %}

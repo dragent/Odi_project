@@ -44,7 +44,7 @@ class ProduitType extends AbstractType
                   array('required' => true, 'label' => 'Prix'))
 
             ->add('photo_produit', FileType::class,
-                  array('required' => false, 'label' => 'Photo'))
+                  array('required' => false, 'label' => 'Photo', 'data_class' => null))
 
             ->add('visible_produit', ChoiceType::class, 
                   array('choices' => array('Visible' => 1, 'Invisible' => 0), 'required' => true, 'label' => 'Catégorie'))

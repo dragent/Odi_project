@@ -44,9 +44,9 @@
                      {{ app.user.username }}
                      {{ app.session.get('pseudo_personne')}}
                 </li>
-                 <li><a href="{{ path('logout') }}">déconnexion</a></li>
+                 <li><a href="{{ path('logout') }}">Déconnexion</a></li>
             {% else %}
-                 <li><a href=" {{ path('login') }}">connexion</a></li>
+                 <li><a href=" {{ path('login') }}">Connexion</a></li>
             {% endif %}
     </ul>
   </div>

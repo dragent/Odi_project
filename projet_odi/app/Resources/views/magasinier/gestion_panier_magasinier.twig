@@ -39,7 +39,7 @@
 
         {% for contenir in Contenir %}
           {% set cpt = cpt+1 %}
-	        <tr>
+          <tr>
             <td>{{ contenir.getRefProduit() }}</td>
 
             {% for produit in Produit %}
@@ -95,24 +95,24 @@
       var res = str.substring(0, lgth-16);
       alert("localeCompare="+test+" res="+res);*/
     function confirme(cpt,id_panier,ref){
-  	var qtt = $("#qtt"+cpt).val();
+    var qtt = $("#qtt"+cpt).val();
       //alert("cpt="+cpt+" ref="+ref+" idpanier="+id_panier+" qtt="+qtt);
 
       //on recupere l'url
-     	var str = location.href;
-     	var lgth = str.length;
+      var str = location.href;
+      var lgth = str.length;
 
-     	//taille de "paniers/gestion/"+id_panier
-     	var lgthFin = "paniers/gestion/"+id_panier;
-     	lgthFin = lgthFin.length;
+      //taille de "paniers/gestion/"+id_panier
+      var lgthFin = "paniers/gestion/"+id_panier;
+      lgthFin = lgthFin.length;
 
-     	var test = str.substring(lgth-lgthFin, lgth);
-     	var res = str.substring(0, lgth-lgthFin);
+      var test = str.substring(lgth-lgthFin, lgth);
+      var res = str.substring(0, lgth-lgthFin);
 
-     	//alert("res="+res+"  test="+test);
+      //alert("res="+res+"  test="+test);
       //on test et on modifie en consequence
-     	if(test.localeCompare("paniers/gestion")==0)
-     	  res += "produits/"+id_panier+"/"+ref+"/"+qtt;
+      if(test.localeCompare("paniers/gestion")==0)
+        res += "produits/"+id_panier+"/"+ref+"/"+qtt;
       else{
         res = str.substring(0, lgth-(lgth-str.indexOf("/magasinier")));
         res += "/magasinier/paniers/gestion/produits/"+id_panier+"/"+ref+"/"+qtt;

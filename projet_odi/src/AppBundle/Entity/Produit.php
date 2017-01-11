@@ -2,23 +2,50 @@
 
 namespace AppBundle\Entity;
 
+use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
+use Symfony\Component\Validator\Constraints as Assert;
+use AppBundle\Validator\Constraints as ProduitAssert;
+
+
 /**
- * Produit
+ * @UniqueEntity(fields="ref_produit", message="Ce produit existe déjà.")
+ * Définit les propriétés d'un produit
  */
 class Produit
 {
     /**
      * @var string
+     *
+     * @Assert\NotBlank(message = "Ce champ ne doit pas être vide.")
+     * @Assert\Length(
+     *          min = 1, 
+     *          max = 255, 
+     *          minMessage = "La référence doit contenir au moins {{ limit }} caractère.",
+     *          maxMessage = "La référence doit contenir au plus {{ limit }} caractères.")
      */
     private $ref_produit;
 
     /**
      * @var string
+     *
+     * @Assert\NotBlank(message = "Ce champ ne doit pas être vide.")
+     * @Assert\Length(
+     *          min = 1, 
+     *          max = 255, 
+     *          minMessage = "Le champ doit contenir au moins {{ limit }} caractère.",
+     *          maxMessage = "Le champ doit contenir au plus {{ limit }} caractères.")
      */
     private $nom_produit;
 
     /**
      * @var string
+     *
+     * @Assert\NotBlank(message = "Ce champ ne doit pas être vide.")
+     * @Assert\Length(
+     *          min = 1, 
+     *          max = 255, 
+     *          minMessage = "Le champ doit contenir au moins {{ limit }} caractère.",
+     *          maxMessage = "Le champ doit contenir au plus {{ limit }} caractères.")
      */
     private $description_produit;
 
@@ -29,26 +56,55 @@ class Produit
 
     /**
      * @var integer
+     *
+     * @Assert\NotBlank(message = "Ce champ ne doit pas être vide.", groups={"stock"})
+     * @Assert\GreaterThanOrEqual(value = 0, message = "La valeur doit être supérieure ou égale à 0.", groups={"stock"})
+     * @Assert\Length(
+     *          min = 1, 
+     *          max = 11, 
+     *          minMessage = "Le champ doit contenir au moins {{ limit }} caractère.",
+     *          maxMessage = "Le champ doit contenir au plus {{ limit }} caractères.", groups={"stock"})
      */
     private $quantite_produit;
 
     /**
      * @var integer
+     *
+     * @Assert\NotBlank(message = "Ce champ ne doit pas être vide.", groups={"stock"})
+     * @Assert\GreaterThanOrEqual(value = 0, message = "La valeur doit être supérieure ou égale à 0.", groups={"stock"})
+     * @Assert\Length(
+     *          min = 1, 
+     *          max = 11, 
+     *          minMessage = "Le champ doit contenir au moins {{ limit }} caractère.",
+     *          maxMessage = "Le champ doit contenir au plus {{ limit }} caractères.", groups={"stock"})
      */
     private $quantite_min_produit;
 
     /**
      * @var integer
+     *
+     * @Assert\NotBlank(message = "Ce champ ne doit pas être vide.")
+     * @Assert\GreaterThanOrEqual(value = 0, message = "La valeur doit être supérieure ou égale à 0.")
+     * @Assert\Length(
+     *          min = 1, 
+     *          max = 11, 
+     *          minMessage = "Le champ doit contenir au moins {{ limit }} caractère.",
+     *          maxMessage = "Le champ doit contenir au plus {{ limit }} caractères.")
      */
     private $prix_produit;
 
     /**
      * @var \DateTime
+     *
+     * @Assert\NotBlank(message = "Ce champ ne doit pas être vide (utilisez le calendrier).", groups={"stock"})
+     * @ProduitAssert\ProchaineDate(groups={"stock"})
      */
     private $date_peremption_produit;
 
     /**
      * @var string
+     *
+     * @Assert\Image(mimeTypesMessage = "Le fichier doit être une image.")
      */
     private $photo_produit;
 
@@ -262,7 +318,7 @@ class Produit
         $this->photo_produit = $photoProduit;
 
         return $this;
-    }
+    }   
 
     /**
      * Get photoProduit

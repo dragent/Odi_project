@@ -32,4 +32,11 @@ class ProduitsStocksType extends AbstractType
                   array('label' => 'Enregistrer', 'attr' => array('class' => 'btn btn-primary')))
         ;
     }
+
+    public function configureOptions(OptionsResolver $resolver)
+    {
+        $resolver->setDefaults(array(
+            'validation_groups' => array('stock')
+        ));
+    }
 }

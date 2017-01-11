@@ -54,15 +54,6 @@ class PersonneController extends Controller
         ));
     }
 
-    /**
-     *  Action qui gère l'identification d'une personne.
-     *
-     *  @return La page html.twig du formulaire d'authentification
-     *          si le formulaire n'est pas soumis, sinon la page
-     *          de liste des produits pour le magasinier ou la page
-     *          de liste des paniers pour le client.
-     */
-
 
     /**
      *  Action qui gère l'affichage du profil d'une personne.
@@ -78,6 +69,7 @@ class PersonneController extends Controller
             'delete_form' => $deleteForm->createView(),
         ));
     }
+
 
     /**
     *   Action qui gère l'édition du profil d'une personne.

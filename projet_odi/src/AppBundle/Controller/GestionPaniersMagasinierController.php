@@ -112,6 +112,7 @@ class GestionPaniersMagasinierController extends Controller
 	*	@return La page html.twig de la liste des paniers validés par le client.
 	*/
 	public function gestionPanierValiderAction(Request $request, $id_panier){
+		
 		$em = $this->getDoctrine()->getManager();
 		
 		$panier = $em->getRepository(Panier::class)->findOneBy(array('id_panier' => $id_panier));

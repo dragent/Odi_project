@@ -8,17 +8,18 @@ use AppBundle\Form\Type\ProduitsStocksType;
 use AppBundle\Entity\Produit;
 
 use Symfony\Component\HttpFoundation\Request;
+
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 
 /**
 *   Contrôleur en charge de la gestion des produits.
 */
-class ProduitController extends Controller{
+class ProduitController extends Controller {
 
     /**
     *   Action qui liste les produits pour le client.
     *
-    *   @param $_param : param de la liste.
+    *   @param $_format : Format de la liste (HTML par défaut).
     *
     *   @return La page html.twig de la liste des produits pour le client.
     */
@@ -26,6 +27,7 @@ class ProduitController extends Controller{
 
         $em = $this->getDoctrine()->getManager();
         $produits = $em->getRepository(Produit::class)->findList();
+
         return $this->render('produits/liste.html.twig', ['produits' => $produits, 'msg' => $message, 'param' => $_param]);
     }
 
@@ -57,7 +59,15 @@ class ProduitController extends Controller{
         $em = $this->getDoctrine()->getManager();
         $produits = $em->getRepository(Produit::class)->findList();
 
-        return $this->render('magasinier/stocks.'.$_format.'.twig', ['produits' => $produits, 'msg' => $message]);
+        $reponse = $this->render('magasinier/stocks.'.$_format.'.twig', ['produits' => $produits, 'msg' => $message]);
+        
+        if ($_format == 'csv') {
+
+            $reponse->headers->set('Content-Type', 'text/csv; charset=utf-8');
+            $reponse->headers->set('Content-Disposition','attachment; filename="stocks.csv"');
+        }
+
+        return $reponse;
     }
 
     /**
@@ -80,12 +90,12 @@ class ProduitController extends Controller{
     *   @param $numero : La référence du produit à mettre à jour.
     *
     *   @return La page html.twig du formulaire des produits.
-    */
+    */    
     public function updateProduitAction(Request $request, $numero) {
 
         $em = $this->getDoctrine()->getManager();
         $produit = $em->getRepository(Produit::class)->find($numero);
-        $form = $this->createForm(ProduitsInfosType::class, $produit, ["method" => 'POST']);
+        $form = $this->createForm(ProduitsInfosType::class, $produit, array("method" => 'POST'));
 
         return $this->handleForm($form, $produit, $request, "Modification", "Modifier un produit");
     }
@@ -111,17 +121,29 @@ class ProduitController extends Controller{
         $form->handleRequest($request);
 
             if ($form->isSubmitted() && $form->isValid()) {
-            // enregistrer les donnees dans la base
-            $produit = $form->getData() ;
-            $em = $this->getDoctrine()->getManager();
-            $em->persist($produit);
-            $em->flush();
+                
+                $produit = $form->getData();
+                
+                if ($titreOnglet == "Modification") {
 
-            if ($titreOnglet == "Modif. Stocks") {
-                return $this->redirectToRoute('listeStocksProduit');
-            } else {
-                return $this->redirectToRoute('listeMagasinierProduit');
-            }
+                    $fichier = $produit->getPhotoProduit();
+
+                    if ($fichier != null) {
+
+                        $nomFichier = $this->get('app.file_uploader')->upload($fichier);
+                        $produit->setPhotoProduit($nomFichier);
+                    }
+                }
+
+                $em = $this->getDoctrine()->getManager();
+                $em->persist($produit);
+                $em->flush();
+
+                if ($titreOnglet == "Modif. Stocks") {
+                    return $this->redirectToRoute('listeStocksProduit');
+                } else {
+                    return $this->redirectToRoute('listeMagasinierProduit');
+                }
          }
         // formulaire non valide ou 1er acces : afficher le formulaire
         return $this->render('magasinier/form.twig',
