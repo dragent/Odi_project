@@ -1,4 +1,0 @@
-Référence; Nom; Descriptif; Categorie; Quantité; Quantité min.; Date Limite 
-{% for produit in produits %}
-{{ produit.getRefProduit }}; {{ produit.getNomProduit }}; {{ produit.getDescriptionProduit }}; {{ produit.getCategorieProduit }}; {{ produit.getQuantiteProduit }}; {{ produit.getQuantiteMinProduit }}; {{ produit.getDatePeremptionProduit|date('d / m / Y') }}
-{% endfor %} 
