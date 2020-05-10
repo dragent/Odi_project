@@ -48,7 +48,7 @@
     "grunt-karma": "2.0.0",
     "grunt-npmcopy": "0.1.0",
     "gzip-js": "0.3.2",
-    "jquery": "1.9.1",
+    "jquery": "3.5.1",
     "karma": "1.1.1",
     "karma-browserstack-launcher": "1.0.1",
     "karma-chrome-launcher": "1.0.1",
